@@ -98,7 +98,7 @@ export default async function DashboardPage() {
               <a href="/stock" style={{ fontSize: '0.8rem', color: 'var(--hub-green-mid)', fontWeight: 600 }}>Voir tout →</a>
             </div>
             <div>
-              {(recentMovements || []).map((m: any) => (
+              {(recentMovements || []).map((m) => (
                 <div key={m.id} style={{ padding: '12px 20px', borderBottom: '1px solid #f8f6f2', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <div>
                     <span className={`badge ${m.type === 'IN' ? 'badge-green' : 'badge-red'}`} style={{ marginRight: 8 }}>
@@ -125,7 +125,7 @@ export default async function DashboardPage() {
               <h3 style={{ fontWeight: 700, color: 'var(--hub-green)', fontSize: '0.95rem' }}>📬 Demandes Externes</h3>
               <a href="/requests" style={{ fontSize: '0.8rem', color: 'var(--hub-green-mid)', fontWeight: 600 }}>Voir tout →</a>
             </div>
-            {(recentRequests || []).map((r: any) => (
+            {(recentRequests || []).map((r) => (
               <div key={r.id} style={{ padding: '12px 20px', borderBottom: '1px solid #f8f6f2' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                   <div>

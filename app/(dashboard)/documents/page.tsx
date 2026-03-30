@@ -34,10 +34,10 @@ export default function DocumentsPage() {
     setLoading(true)
     const [{ data: docs }, { data: cls }] = await Promise.all([
       supabase.from('documents').select('*, client:clients(name, type)').order('created_at', { ascending: false }),
-      supabase.from('clients').select('id, name, type').order('name')
+      supabase.from('clients').select('id, name, type, created_at').order('name')
     ])
     setDocuments(docs || [])
-    setClients(cls || [])
+    setClients((cls as Client[]) || [])
     setLoading(false)
   }
 
