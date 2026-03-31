@@ -8,26 +8,34 @@ const nav = [
     section: 'Principal',
     items: [
       { href: '/dashboard', icon: '📊', label: 'Tableau de bord' },
+      { href: '/reports', icon: '📈', label: 'Rapports' },
     ]
   },
   {
-    section: 'Gestion',
+    section: 'Opérations',
     items: [
-      { href: '/clients', icon: '👥', label: 'Clients & Partenaires' },
+      { href: '/sales', icon: '💰', label: 'Ventes & Facturation' },
       { href: '/stock', icon: '📦', label: 'Gestion de Stock' },
-      { href: '/documents', icon: '📄', label: 'Documents' },
+      { href: '/clients', icon: '👥', label: 'Clients & Partenaires' },
     ]
   },
   {
-    section: 'RH',
+    section: 'Documents',
     items: [
-      { href: '/recruitment', icon: '👨‍💼', label: 'Recrutement' },
+      { href: '/documents', icon: '📄', label: 'Documents' },
+      { href: '/requests', icon: '📬', label: 'Demandes Externes' },
+    ]
+  },
+  {
+    section: 'Ressources Humaines',
+    items: [
+      { href: '/employees', icon: '👨‍💼', label: 'Employés & RH' },
+      { href: '/recruitment', icon: '🎯', label: 'Recrutement' },
     ]
   },
   {
     section: 'Portail',
     items: [
-      { href: '/requests', icon: '📬', label: 'Demandes Externes' },
       { href: '/portal', icon: '🌐', label: 'Portail Public', external: true },
     ]
   },
