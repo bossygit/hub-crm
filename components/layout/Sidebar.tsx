@@ -2,6 +2,8 @@
 import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import Link from 'next/link'
+import Image from 'next/image'
+import logoWhite from '../../app/assets/images/logo-white.png'
 
 const nav = [
   {
@@ -54,10 +56,12 @@ export default function Sidebar() {
   return (
     <div className="sidebar">
       <div className="sidebar-logo">
-        <img
-          src="/app/assets/images/logo-white.png"
+        <Image
+          src={logoWhite}
           alt="HUB Distribution"
-          style={{ width: 160, height: 'auto', display: 'block' }}
+          width={160}
+          style={{ height: 'auto', display: 'block' }}
+          priority
         />
       </div>
 

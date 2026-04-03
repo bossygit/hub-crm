@@ -2,6 +2,8 @@
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
+import Image from 'next/image'
+import appIcon from '../../assets/images/app-icon.png'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -28,10 +30,13 @@ export default function LoginPage() {
     <div className="login-bg">
       <div className="login-card">
         <div className="login-brand">
-          <img
-            src="/app/assets/images/app-icon.png"
+          <Image
+            src={appIcon}
             alt="HUB Distribution"
-            style={{ width: 84, height: 84, margin: '0 auto 12px', display: 'block' }}
+            width={84}
+            height={84}
+            style={{ margin: '0 auto 12px', display: 'block' }}
+            priority
           />
           <h1>HUB Distribution</h1>
           <div className="tagline">Système de Gestion Intégré</div>
