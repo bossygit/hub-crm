@@ -28,7 +28,11 @@ export default function LoginPage() {
     <div className="login-bg">
       <div className="login-card">
         <div className="login-brand">
-          <div style={{ marginBottom: 8, fontSize: '2.5rem' }}>🌿</div>
+          <img
+            src="/app/assets/images/app-icon.png"
+            alt="HUB Distribution"
+            style={{ width: 84, height: 84, margin: '0 auto 12px', display: 'block' }}
+          />
           <h1>HUB Distribution</h1>
           <div className="tagline">Système de Gestion Intégré</div>
         </div>

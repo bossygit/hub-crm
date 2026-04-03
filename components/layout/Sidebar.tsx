@@ -54,9 +54,11 @@ export default function Sidebar() {
   return (
     <div className="sidebar">
       <div className="sidebar-logo">
-        <div style={{ fontSize: '1.5rem', marginBottom: 4 }}>🌿</div>
-        <h1>HUB</h1>
-        <span>Distribution CRM</span>
+        <img
+          src="/app/assets/images/logo-white.png"
+          alt="HUB Distribution"
+          style={{ width: 160, height: 'auto', display: 'block' }}
+        />
       </div>
 
       <nav style={{ flex: 1, overflowY: 'auto', padding: '8px 0' }}>
