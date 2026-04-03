@@ -35,6 +35,10 @@ const nav = [
     section: 'Ressources Humaines',
     items: [
       { href: '/employees', icon: '👨‍💼', label: 'Employés & RH' },
+      { href: '/hr/contracts', icon: '📝', label: 'Contrats' },
+      { href: '/hr/certificates', icon: '🏛', label: 'Attestations' },
+      { href: '/hr/payslips', icon: '💵', label: 'Fiches de paie' },
+      { href: '/hr/leaves', icon: '🏖', label: 'Congés' },
       { href: '/recruitment', icon: '🎯', label: 'Recrutement' },
     ]
   },

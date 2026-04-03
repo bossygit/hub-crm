@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import Link from 'next/link'
 import type { Employee } from '@/types'
 
 const statusColors: Record<string, string> = { actif: 'badge-green', conge: 'badge-amber', suspendu: 'badge-red', sorti: 'badge-gray' }
@@ -22,6 +23,7 @@ export default function EmployeesPage() {
   const [empDocs, setEmpDocs] = useState<any[]>([])
   const [showDocModal, setShowDocModal] = useState(false)
   const [docForm, setDocForm] = useState({ type: 'contrat', title: '', issued_date: new Date().toISOString().split('T')[0] })
+  const [leaveBalance, setLeaveBalance] = useState<any>(null)
   const supabase = createClient()
 
   const load = useCallback(async () => {
@@ -34,8 +36,12 @@ export default function EmployeesPage() {
   useEffect(() => { load() }, [load])
 
   async function loadEmpDocs(empId: string) {
-    const { data } = await supabase.from('employee_documents').select('*').eq('employee_id', empId).order('created_at', { ascending: false })
+    const [{ data }, { data: lb }] = await Promise.all([
+      supabase.from('employee_documents').select('*').eq('employee_id', empId).order('created_at', { ascending: false }),
+      supabase.from('leave_balances').select('*').eq('employee_id', empId).eq('year', new Date().getFullYear()).maybeSingle(),
+    ])
     setEmpDocs(data || [])
+    setLeaveBalance(lb)
   }
 
   function openNew() { setEditing(null); setForm(emptyForm); setShowModal(true) }
@@ -160,6 +166,44 @@ export default function EmployeesPage() {
                     </div>
                   ))}
                 </div>
+
+                {/* Liens rapides modules RH */}
+                <div style={{ borderTop: '1px solid #f0ece4', paddingTop: 12, marginBottom: 12 }}>
+                  <div style={{ fontWeight: 700, fontSize: '0.8rem', color: 'var(--hub-green)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>Modules RH</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                    {[
+                      { href: '/hr/contracts', icon: '📝', label: 'Contrats' },
+                      { href: '/hr/certificates', icon: '🏛', label: 'Attestations' },
+                      { href: '/hr/payslips', icon: '💵', label: 'Fiches paie' },
+                      { href: '/hr/leaves', icon: '🏖', label: 'Conges' },
+                    ].map(link => (
+                      <Link key={link.href} href={link.href} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 10px', background: '#f8f5ee', borderRadius: 6, textDecoration: 'none', color: '#555', fontSize: '0.78rem', fontWeight: 600 }}>
+                        <span>{link.icon}</span> {link.label}
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Solde conge */}
+                {leaveBalance && (
+                  <div style={{ borderTop: '1px solid #f0ece4', paddingTop: 12, marginBottom: 12 }}>
+                    <div style={{ fontWeight: 700, fontSize: '0.8rem', color: 'var(--hub-green)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>Solde conge {leaveBalance.year}</div>
+                    <div style={{ display: 'flex', gap: 10 }}>
+                      <div style={{ flex: 1, textAlign: 'center', background: '#ecfdf5', borderRadius: 8, padding: '8px 4px' }}>
+                        <div style={{ fontWeight: 700, color: '#065f46', fontSize: '1.1rem' }}>{leaveBalance.remaining_days}</div>
+                        <div style={{ fontSize: '0.68rem', color: '#666' }}>Restant</div>
+                      </div>
+                      <div style={{ flex: 1, textAlign: 'center', background: '#fef2f2', borderRadius: 8, padding: '8px 4px' }}>
+                        <div style={{ fontWeight: 700, color: '#991b1b', fontSize: '1.1rem' }}>{leaveBalance.used_days}</div>
+                        <div style={{ fontSize: '0.68rem', color: '#666' }}>Utilises</div>
+                      </div>
+                      <div style={{ flex: 1, textAlign: 'center', background: '#f8f5ee', borderRadius: 8, padding: '8px 4px' }}>
+                        <div style={{ fontWeight: 700, color: '#555', fontSize: '1.1rem' }}>{leaveBalance.total_days}</div>
+                        <div style={{ fontSize: '0.68rem', color: '#666' }}>Total</div>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {/* Documents RH */}
                 <div style={{ borderTop: '1px solid #f0ece4', paddingTop: 12 }}>

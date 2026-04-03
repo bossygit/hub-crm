@@ -51,6 +51,13 @@ export interface Employee {
 }
 export interface EmployeeDocument {
   id: string; employee_id: string; employee?: Employee; type: string; title: string; file_url?: string; document_id?: string; issued_date: string; created_at: string
+  content?: Record<string, unknown>; status?: 'draft' | 'pending' | 'approved' | 'rejected'
+  start_date?: string; end_date?: string; approved_by?: string; approved_at?: string
+}
+
+export interface LeaveBalance {
+  id: string; employee_id: string; employee?: Employee; year: number
+  total_days: number; used_days: number; remaining_days: number
 }
 export interface Job {
   id: string; title: string; department: string; description: string; requirements?: string; location: string; type: 'cdi' | 'cdd' | 'stage' | 'freelance'; status: 'open' | 'closed' | 'archived'; deadline?: string; created_at: string
