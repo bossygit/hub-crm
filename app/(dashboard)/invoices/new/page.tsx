@@ -49,6 +49,7 @@ export default function NewInvoicePage() {
   const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle')
   const [draftId, setDraftId] = useState<string | null>(null)
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const isSaving = useRef(false)
   const supabase = createClient()
 
   // Calculs live
@@ -114,6 +115,7 @@ export default function NewInvoicePage() {
   }, [form, items])
 
   async function autoSave() {
+    if (isSaving.current) return
     if (!form.invoice_number) return
     setAutoSaveStatus('saving')
     const { data: userData } = await supabase.auth.getUser()
@@ -183,6 +185,8 @@ export default function NewInvoicePage() {
     const validItems = items.filter(it => it.name && it.quantity > 0 && it.unit_price >= 0)
     if (validItems.length === 0) { alert('Ajoutez au moins une ligne valide'); return }
 
+    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current)
+    isSaving.current = true
     setSaving(true)
     const { data: userData } = await supabase.auth.getUser()
     const payload = {
@@ -210,6 +214,7 @@ export default function NewInvoicePage() {
       validItems.map((it, idx) => ({ ...it, invoice_id: invoiceId!, sort_order: idx }))
     )
     setSaving(false)
+    isSaving.current = false
     router.push(`/invoices/${invoiceId}`)
   }
 
