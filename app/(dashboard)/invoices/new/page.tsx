@@ -293,8 +293,8 @@ export default function NewInvoicePage() {
         </div>
       </div>
 
-      <div className="invoice-page__body" style={{ padding: '24px 32px', maxWidth: 1000, margin: '0 auto' }}>
-        <div className="invoice-page__layout invoice-form__layout" style={{ display: 'grid', gridTemplateColumns: '1fr 380px', gap: 24, alignItems: 'start' }}>
+      <div className="invoice-page__body">
+        <div className="invoice-page__layout invoice-form__layout">
 
           {/* ── Colonne principale ── */}
           <div className="invoice-page__main" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -383,7 +383,7 @@ export default function NewInvoicePage() {
                 {items.map((item, idx) => (
                   <div key={idx} className="invoice-line-item" style={{ display: 'grid', gridTemplateColumns: '2.5fr 1.5fr 1fr 1fr 1fr auto', gap: 8, alignItems: 'flex-start', background: '#fafaf7', borderRadius: 8, padding: '10px' }}>
                     <div className="invoice-line-item__product">
-                      <select className="hub-select invoice-field invoice-field--product" style={{ fontSize: '0.82rem' }}
+                      <select className="hub-select invoice-field invoice-field--product"
                         value={item.product_id || ''}
                         onChange={e => updateItem(idx, 'product_id', e.target.value || null)}>
                         <option value="">— Produit catalogue —</option>
@@ -393,27 +393,27 @@ export default function NewInvoicePage() {
                           </option>
                         ))}
                       </select>
-                      <input className="hub-input invoice-field invoice-field--line-name" style={{ marginTop: 4, fontSize: '0.82rem' }}
+                      <input className="hub-input invoice-field invoice-field--line-name" style={{ marginTop: 4 }}
                         placeholder="Nom du produit / service..."
                         value={item.name}
                         onChange={e => updateItem(idx, 'name', e.target.value)} />
                     </div>
-                    <input className="hub-input invoice-field invoice-field--line-description" style={{ fontSize: '0.82rem' }}
+                    <input className="hub-input invoice-field invoice-field--line-description"
                       placeholder="Description..."
                       value={item.description}
                       onChange={e => updateItem(idx, 'description', e.target.value)} />
                     <div className="invoice-line-item__qty">
-                      <input className="hub-input invoice-field invoice-field--quantity" type="number" min={0} step="0.01" style={{ fontSize: '0.82rem' }}
+                      <input className="hub-input invoice-field invoice-field--quantity" type="number" min={0} step="0.01"
                         value={item.quantity}
                         onChange={e => updateItem(idx, 'quantity', parseFloat(e.target.value) || 0)} />
-                      <select className="hub-select invoice-field invoice-field--unit" style={{ marginTop: 4, fontSize: '0.78rem' }}
+                      <select className="hub-select invoice-field invoice-field--unit" style={{ marginTop: 4 }}
                         value={item.unit}
                         onChange={e => updateItem(idx, 'unit', e.target.value)}>
                         {UNITS.map(u => <option key={u}>{u}</option>)}
                       </select>
                     </div>
                     <div className="invoice-line-item__price">
-                      <input className="hub-input invoice-field invoice-field--unit-price" type="number" min={0} style={{ fontSize: '0.82rem' }}
+                      <input className="hub-input invoice-field invoice-field--unit-price" type="number" min={0}
                         value={item.unit_price}
                         onChange={e => updateItem(idx, 'unit_price', parseFloat(e.target.value) || 0)} />
                       <div style={{ fontSize: '0.7rem', color: '#999', marginTop: 2, textAlign: 'right' }}>FCFA</div>
@@ -475,19 +475,19 @@ export default function NewInvoicePage() {
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.875rem', paddingBottom: 8, borderBottom: '1px solid #f0ece4' }}>
                     <span style={{ color: '#666' }}>Remise</span>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <input className="invoice-field invoice-field--discount" type="number" min={0} value={form.discount}
+                      <input className="hub-input invoice-field invoice-field--discount" type="number" min={0} value={form.discount}
                         onChange={e => setForm(f => ({ ...f, discount: parseFloat(e.target.value) || 0 }))}
-                        style={{ width: 80, padding: '4px 8px', border: '1.5px solid #ddd', borderRadius: 6, fontSize: '0.82rem', textAlign: 'right' }} />
+                        style={{ width: 96, textAlign: 'right' }} />
                       <span style={{ fontSize: '0.75rem', color: '#999' }}>FCFA</span>
                     </div>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.875rem', paddingBottom: 8, borderBottom: '1px solid #f0ece4' }}>
                     <span style={{ color: '#666' }}>TVA</span>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                      <input className="invoice-field invoice-field--tax-rate" type="number" min={0} max={100} value={form.tax_rate}
+                      <input className="hub-input invoice-field invoice-field--tax-rate" type="number" min={0} max={100} value={form.tax_rate}
                         onChange={e => setForm(f => ({ ...f, tax_rate: parseFloat(e.target.value) || 0 }))}
-                        style={{ width: 50, padding: '4px 6px', border: '1.5px solid #ddd', borderRadius: 6, fontSize: '0.82rem', textAlign: 'center' }} />
-                      <span style={{ color: '#666', fontSize: '0.82rem' }}>% = {taxAmount.toLocaleString('fr-FR', { maximumFractionDigits: 0 })} FCFA</span>
+                        style={{ width: 58, textAlign: 'center' }} />
+                      <span style={{ color: '#666', fontSize: '0.875rem' }}>% = {taxAmount.toLocaleString('fr-FR', { maximumFractionDigits: 0 })} FCFA</span>
                     </div>
                   </div>
                   <div className="invoice-form__summary-total" style={{ background: 'var(--hub-green)', color: 'white', borderRadius: 8, padding: '14px 16px', marginTop: 4 }}>
