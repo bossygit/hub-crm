@@ -66,6 +66,24 @@ export default function NewQuotePage() {
       await supabase.from('document_items').insert(
         validItems.map((it, idx) => ({ ...it, document_id: doc.id, sort_order: idx }))
       )
+
+      if (targetStatus === 'pending') {
+        try {
+          await fetch('/api/notifications/send', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              type: 'quote_pending',
+              title: `Devis ${numData} en attente`,
+              message: `Devis ${form.title || numData} pour ${form.client_name || 'client non defini'} — ${total.toLocaleString('fr-FR')} FCFA`,
+              referenceId: doc.id,
+              referenceType: 'quote',
+              link: `/quotes/${doc.id}`,
+            }),
+          })
+        } catch { /* best-effort */ }
+      }
+
       router.push(`/quotes/${doc.id}`)
     } catch (err: unknown) {
       alert('Erreur: ' + (err instanceof Error ? err.message : String(err)))

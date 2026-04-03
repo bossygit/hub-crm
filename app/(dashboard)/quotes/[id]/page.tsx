@@ -40,6 +40,24 @@ export default function QuoteDetailPage() {
       status, updated_at: new Date().toISOString(),
       ...(status === 'approved' ? { validated_by: userData.user?.id, validated_at: new Date().toISOString() } : {}),
     }).eq('id', id)
+
+    if (status === 'pending' && doc) {
+      try {
+        await fetch('/api/notifications/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            type: 'quote_pending',
+            title: `Devis ${doc.document_number} en attente`,
+            message: `Devis ${doc.title || doc.document_number} — ${Number(doc.total_amount || 0).toLocaleString('fr-FR')} FCFA`,
+            referenceId: id,
+            referenceType: 'quote',
+            link: `/quotes/${id}`,
+          }),
+        })
+      } catch { /* best-effort */ }
+    }
+
     load(); setUpdating(false)
   }
 

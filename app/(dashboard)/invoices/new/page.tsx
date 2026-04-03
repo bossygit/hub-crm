@@ -230,6 +230,23 @@ export default function NewInvoicePage() {
         .insert(validItems.map((it, idx) => ({ ...it, invoice_id: invoiceId!, sort_order: idx })))
       if (itemsError) throw new Error('Erreur insertion lignes : ' + itemsError.message)
 
+      if (targetStatus === 'pending') {
+        try {
+          await fetch('/api/notifications/send', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              type: 'invoice_pending',
+              title: `Facture ${form.invoice_number} en attente`,
+              message: `Facture ${form.invoice_number} pour ${form.client_name || 'client non defini'} — ${total.toLocaleString('fr-FR')} FCFA`,
+              referenceId: invoiceId,
+              referenceType: 'invoice',
+              link: `/invoices/${invoiceId}`,
+            }),
+          })
+        } catch { /* notification best-effort */ }
+      }
+
       router.push(`/invoices/${invoiceId}`)
 
     } catch (error: unknown) {

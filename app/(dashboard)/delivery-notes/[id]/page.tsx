@@ -38,7 +38,25 @@ export default function DeliveryNoteDetailPage() {
     if (status === 'approved') { extra.validated_by = userData.user?.id; extra.validated_at = new Date().toISOString() }
     const { error } = await supabase.from('documents').update({ status, ...extra }).eq('id', id)
     if (error) alert('Erreur: ' + error.message)
-    else load()
+    else {
+      if (status === 'pending' && doc) {
+        try {
+          await fetch('/api/notifications/send', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              type: 'bl_pending',
+              title: `BL ${doc.document_number} en attente`,
+              message: `Bon de livraison ${doc.title || doc.document_number} pour ${doc.client?.name || 'client non defini'}`,
+              referenceId: id,
+              referenceType: 'delivery_note',
+              link: `/delivery-notes/${id}`,
+            }),
+          })
+        } catch { /* best-effort */ }
+      }
+      load()
+    }
     setUpdating(false)
   }
 

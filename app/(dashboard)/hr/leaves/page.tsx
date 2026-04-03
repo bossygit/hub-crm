@@ -56,13 +56,31 @@ export default function LeavesPage() {
     setSaving(true)
     const emp = employees.find(em => em.id === form.employee_id)
     const days = workingDays(form.start_date, form.end_date)
-    await supabase.from('employee_documents').insert({
+    const { data: newLeave } = await supabase.from('employee_documents').insert({
       employee_id: form.employee_id, type: 'conge', status: 'pending',
       title: `${leaveTypes[form.leave_type] || form.leave_type} — ${emp?.full_name || ''} (${days}j)`,
       issued_date: new Date().toISOString().split('T')[0],
       start_date: form.start_date, end_date: form.end_date,
       content: { leave_type: form.leave_type, reason: form.reason, days },
-    })
+    }).select('id').single()
+
+    if (newLeave) {
+      try {
+        await fetch('/api/notifications/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            type: 'leave_pending',
+            title: `Demande de conge — ${emp?.full_name || ''}`,
+            message: `${leaveTypes[form.leave_type] || form.leave_type} du ${form.start_date} au ${form.end_date} (${days} jours)`,
+            referenceId: newLeave.id,
+            referenceType: 'leave',
+            link: '/hr/leaves',
+          }),
+        })
+      } catch { /* best-effort */ }
+    }
+
     setSaving(false); setShowModal(false); load()
   }
 

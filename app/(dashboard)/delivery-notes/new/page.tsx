@@ -69,6 +69,24 @@ export default function NewDeliveryNotePage() {
       await supabase.from('document_items').insert(
         validItems.map((it, idx) => ({ ...it, document_id: doc.id, sort_order: idx }))
       )
+
+      if (targetStatus === 'pending') {
+        try {
+          await fetch('/api/notifications/send', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              type: 'bl_pending',
+              title: `BL ${numData} en attente`,
+              message: `Bon de livraison ${form.title || numData} pour ${form.client_name || 'client non defini'}`,
+              referenceId: doc.id,
+              referenceType: 'delivery_note',
+              link: `/delivery-notes/${doc.id}`,
+            }),
+          })
+        } catch { /* best-effort */ }
+      }
+
       router.push(`/delivery-notes/${doc.id}`)
     } catch (err: unknown) {
       alert('Erreur: ' + (err instanceof Error ? err.message : String(err)))

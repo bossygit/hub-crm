@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import PendingValidationsBlock from './PendingValidationsBlock'
 
 export default async function DashboardPage() {
   const supabase = await createClient()
@@ -66,6 +67,8 @@ export default async function DashboardPage() {
             <div className="stat-label">Demandes en attente</div>
           </div>
         </div>
+
+        <PendingValidationsBlock />
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
           {/* Alertes stock */}

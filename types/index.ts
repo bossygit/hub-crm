@@ -133,3 +133,19 @@ export interface ClientFinancialSummary {
   balance_due: number
   last_invoice_date?: string
 }
+
+// ── NOTIFICATIONS ────────────────────────────────────
+export type NotificationType = 'invoice_pending' | 'bl_pending' | 'leave_pending' | 'quote_pending'
+
+export interface AppNotification {
+  id: string
+  type: NotificationType
+  title: string
+  message?: string
+  reference_id?: string
+  reference_type?: string
+  link?: string
+  is_read: boolean
+  recipient_id?: string
+  created_at: string
+}

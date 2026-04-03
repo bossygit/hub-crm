@@ -66,7 +66,25 @@ export default function InvoiceDetailPage() {
     if (status === 'approved') extra.validated_by = userData.user?.id
     const { error } = await supabase.from('invoices').update({ status, ...extra }).eq('id', id)
     if (error) alert('Erreur: ' + error.message)
-    else load()
+    else {
+      if (status === 'pending' && invoice) {
+        try {
+          await fetch('/api/notifications/send', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              type: 'invoice_pending',
+              title: `Facture ${invoice.invoice_number} en attente`,
+              message: `Facture ${invoice.invoice_number} — ${Number(invoice.total).toLocaleString('fr-FR')} FCFA`,
+              referenceId: id,
+              referenceType: 'invoice',
+              link: `/invoices/${id}`,
+            }),
+          })
+        } catch { /* best-effort */ }
+      }
+      load()
+    }
     setUpdating(false)
   }
 
