@@ -80,6 +80,43 @@ export default function StockPage() {
   })
   const productBatches = batches.filter(b => b.product_id === movForm.product_id && b.quantity > 0)
 
+  function printStockBon(m: any) {
+    const isIn = m.type === 'IN'
+    const typeName = isIn ? 'ENTRÉE' : m.type === 'OUT' ? 'SORTIE' : 'AJUSTEMENT'
+    const prefix = isIn ? 'BSE' : 'BSS'
+    const html = `<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"><title>Bon ${typeName} Stock</title>
+<style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:'Segoe UI',Arial,sans-serif;color:#1a1a1a;background:white}@page{margin:15mm 18mm;size:A4}
+.header{display:flex;justify-content:space-between;padding:24px 32px 20px;background:${isIn ? '#1a3d2b' : '#7f1d1d'};color:white}
+.company-name{font-size:1.4rem;font-weight:800;font-family:Georgia,serif}.company-sub{font-size:0.7rem;opacity:0.65;letter-spacing:0.12em;text-transform:uppercase;margin-top:2px}
+.badge-type{background:#d4a017;color:white;padding:5px 14px;border-radius:4px;font-weight:700;font-size:0.85rem}
+.body{padding:28px 32px}
+.meta-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:24px}
+.meta-box{background:#f8f5ee;padding:14px 16px;border-radius:8px}.meta-label{font-size:0.65rem;text-transform:uppercase;letter-spacing:0.1em;color:#888;font-weight:700;margin-bottom:4px}.meta-value{font-size:0.9rem;font-weight:600;color:#1a3d2b}
+.amount-box{background:${isIn ? '#ecfdf5' : '#fef2f2'};border:2px solid ${isIn ? '#a7f3d0' : '#fecaca'};border-radius:12px;padding:24px;text-align:center;margin:24px 0}
+.amount{font-family:Georgia,serif;font-size:2.2rem;font-weight:800;color:${isIn ? '#065f46' : '#991b1b'}}
+.sig-area{border:1.5px dashed #ccc;border-radius:8px;height:60px;display:flex;align-items:center;justify-content:center;color:#ccc;font-size:0.8rem;margin-top:8px}
+.footer{padding:12px 32px;background:#0f1f17;color:rgba(255,255,255,0.5);font-size:0.7rem;display:flex;justify-content:space-between}
+</style></head><body>
+<div class="header"><div><div class="company-name">HUB Distribution</div><div class="company-sub">Transformation & Distribution Agricole</div></div>
+<div style="text-align:right"><div class="badge-type">${isIn ? '📥' : '📤'} BON DE ${typeName}</div><div style="font-family:monospace;font-size:0.9rem;margin-top:6px;opacity:0.7">${prefix}-${m.id.slice(-8).toUpperCase()}</div></div></div>
+<div class="body">
+<div class="meta-grid">
+<div class="meta-box"><div class="meta-label">Date</div><div class="meta-value">${new Date(m.created_at).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })}</div></div>
+<div class="meta-box"><div class="meta-label">Produit</div><div class="meta-value">${m.product?.name || '—'}</div></div>
+<div class="meta-box"><div class="meta-label">Lot</div><div class="meta-value">${m.batch?.batch_number || '—'}</div></div>
+</div>
+<div class="amount-box"><div style="font-size:0.75rem;color:${isIn ? '#065f46' : '#991b1b'};text-transform:uppercase;letter-spacing:0.1em;margin-bottom:4px">Quantité ${typeName.toLowerCase()}</div><div class="amount">${isIn ? '+' : '-'}${m.quantity} ${m.product?.unit || ''}</div></div>
+${m.reason ? `<div style="padding:14px 18px;background:#f8f5ee;border-radius:8px;margin-bottom:20px"><div style="font-size:0.65rem;text-transform:uppercase;letter-spacing:0.1em;color:#888;font-weight:700;margin-bottom:4px">Motif</div><div style="font-size:0.9rem;color:#555">${m.reason}</div></div>` : ''}
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:32px;padding-top:20px;border-top:1px solid #ddd">
+<div style="text-align:center"><div style="font-size:0.72rem;color:#888;font-weight:700;text-transform:uppercase;margin-bottom:8px">Magasinier</div><div class="sig-area">Signature</div></div>
+<div style="text-align:center"><div style="font-size:0.72rem;color:#888;font-weight:700;text-transform:uppercase;margin-bottom:8px">Responsable</div><div class="sig-area">Signature & cachet</div></div>
+</div></div>
+<div class="footer"><span>HUB Distribution — RCCM: BZV-XXXX-XX — NIF: XXXXXXXXXX — Brazzaville, Congo</span><span>Imprimé le ${new Date().toLocaleDateString('fr-FR')}</span></div>
+</body></html>`
+    const w = window.open('', '_blank')
+    if (w) { w.document.write(html); w.document.close(); setTimeout(() => w.print(), 800) }
+  }
+
   return (
     <div>
       <div className="page-header">
@@ -202,7 +239,7 @@ export default function StockPage() {
           <div style={{ background:'white', borderRadius:12, border:'1px solid #e8e4db', overflow:'hidden' }}>
             <table className="hub-table">
               <thead>
-                <tr><th>Date</th><th>Produit</th><th>Lot</th><th>Type</th><th>Quantité</th><th>Motif</th></tr>
+                <tr><th>Date</th><th>Produit</th><th>Lot</th><th>Type</th><th>Quantité</th><th>Motif</th><th>Bon</th></tr>
               </thead>
               <tbody>
                 {movements.map(m => (
@@ -219,9 +256,14 @@ export default function StockPage() {
                       {m.type==='IN'?'+':m.type==='OUT'?'-':''}{m.quantity} {m.product?.unit}
                     </td>
                     <td style={{color:'#666',fontSize:'0.8rem'}}>{m.reason || '—'}</td>
+                    <td>
+                      {['IN','OUT'].includes(m.type) && (
+                        <button className="btn-ghost" style={{padding:'4px 10px',fontSize:'0.72rem'}} onClick={() => printStockBon(m)}>🖨️</button>
+                      )}
+                    </td>
                   </tr>
                 ))}
-                {movements.length === 0 && <tr><td colSpan={6} style={{textAlign:'center',padding:40,color:'#999'}}>Aucun mouvement</td></tr>}
+                {movements.length === 0 && <tr><td colSpan={7} style={{textAlign:'center',padding:40,color:'#999'}}>Aucun mouvement</td></tr>}
               </tbody>
             </table>
           </div>

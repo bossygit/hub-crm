@@ -16,7 +16,9 @@ const nav = [
   {
     section: 'Opérations',
     items: [
+      { href: '/quotes', icon: '📝', label: 'Devis' },
       { href: '/invoices', icon: '🧾', label: 'Facturation' },
+      { href: '/delivery-notes', icon: '🚚', label: 'Bons de Livraison' },
       { href: '/sales', icon: '💰', label: 'Commandes / Ventes' },
       { href: '/stock', icon: '📦', label: 'Gestion de Stock' },
       { href: '/clients', icon: '👥', label: 'Clients & Partenaires' },

@@ -1,7 +1,7 @@
 export type UserRole = 'ceo' | 'manager' | 'admin' | 'employee' | 'client'
 export type ClientType = 'client' | 'fournisseur' | 'institution'
-export type DocumentType = 'facture' | 'bon_de_livraison' | 'attestation' | 'contrat' | 'document_rh' | 'document_administratif' | 'autre'
-export type DocumentStatus = 'draft' | 'pending' | 'approved' | 'rejected'
+export type DocumentType = 'facture' | 'bon_de_livraison' | 'attestation' | 'contrat' | 'document_rh' | 'document_administratif' | 'autre' | 'devis' | 'bon_livraison' | 'bon_entree_stock' | 'bon_sortie_stock' | 'recu_paiement'
+export type DocumentStatus = 'draft' | 'pending' | 'approved' | 'rejected' | 'generated' | 'sent' | 'converted'
 export type SaleStatus = 'draft' | 'pending' | 'approved' | 'rejected' | 'cancelled'
 export type EmployeeStatus = 'actif' | 'conge' | 'suspendu' | 'sorti'
 
@@ -28,6 +28,23 @@ export interface Sale {
 }
 export interface Document {
   id: string; reference: string; title: string; type: DocumentType; status: DocumentStatus; client_id?: string; client?: Client; sale_id?: string; employee_id?: string; content?: Record<string, unknown>; file_url?: string; rejection_reason?: string; created_by?: string; approved_by?: string; approved_at?: string; created_at: string
+  document_number?: string; total_amount?: number; discount?: number; tax_rate?: number; tax_amount?: number
+  invoice_id?: string; invoice?: Invoice; source_document_id?: string; due_date?: string; payment_terms?: string
+  validated_by?: string; validated_at?: string; items?: DocumentItem[]
+}
+
+export interface DocumentItem {
+  id?: string
+  document_id?: string
+  product_id?: string | null
+  product?: Product
+  name: string
+  description?: string
+  quantity: number
+  unit: string
+  unit_price: number
+  subtotal?: number
+  sort_order?: number
 }
 export interface Employee {
   id: string; user_id?: string; employee_number?: string; full_name: string; position: string; department: string; email?: string; phone?: string; hire_date: string; contract_type: 'cdi' | 'cdd' | 'stage' | 'freelance'; salary?: number; status: EmployeeStatus; address?: string; notes?: string; created_at: string

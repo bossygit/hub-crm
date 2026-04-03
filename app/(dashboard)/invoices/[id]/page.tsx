@@ -81,6 +81,50 @@ export default function InvoiceDetailPage() {
     setSaving(false); setShowPaymentModal(false); load()
   }
 
+  function generateReceipt(payment: any) {
+    if (!invoice) return
+    const html = `<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"><title>Reçu ${payment.reference || ''}</title>
+<style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:'Segoe UI',Arial,sans-serif;color:#1a1a1a;background:white;padding:0}@page{margin:15mm 18mm;size:A4}
+.header{display:flex;justify-content:space-between;padding:24px 32px 20px;background:#1a3d2b;color:white}
+.company-name{font-size:1.4rem;font-weight:800;font-family:Georgia,serif}.company-sub{font-size:0.7rem;opacity:0.65;letter-spacing:0.12em;text-transform:uppercase;margin-top:2px}
+.badge-type{background:#d4a017;color:white;padding:5px 14px;border-radius:4px;font-weight:700;font-size:0.85rem}
+.body{padding:28px 32px}
+.meta-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px}
+.meta-box{background:#f8f5ee;padding:14px 16px;border-radius:8px}.meta-label{font-size:0.65rem;text-transform:uppercase;letter-spacing:0.1em;color:#888;font-weight:700;margin-bottom:4px}.meta-value{font-size:0.9rem;font-weight:600;color:#1a3d2b}
+.amount-box{background:#ecfdf5;border:2px solid #a7f3d0;border-radius:12px;padding:24px;text-align:center;margin:24px 0}
+.amount-box .amount{font-family:Georgia,serif;font-size:2rem;font-weight:800;color:#065f46}
+.info-row{display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #f0ece4;font-size:0.9rem}
+.sig-area{border:1.5px dashed #ccc;border-radius:8px;height:60px;display:flex;align-items:center;justify-content:center;color:#ccc;font-size:0.8rem;margin-top:8px}
+.footer{padding:12px 32px;background:#0f1f17;color:rgba(255,255,255,0.5);font-size:0.7rem;display:flex;justify-content:space-between}
+</style></head><body>
+<div class="header"><div><div class="company-name">HUB Distribution</div><div class="company-sub">Transformation & Distribution Agricole</div></div>
+<div style="text-align:right"><div class="badge-type">💰 REÇU DE PAIEMENT</div></div></div>
+<div class="body">
+<div class="meta-grid">
+<div class="meta-box"><div class="meta-label">Date du paiement</div><div class="meta-value">${new Date(payment.payment_date).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })}</div></div>
+<div class="meta-box"><div class="meta-label">Facture N°</div><div class="meta-value" style="font-family:monospace">${invoice.invoice_number}</div></div>
+<div class="meta-box"><div class="meta-label">Client</div><div class="meta-value">${invoice.client?.name || '—'}</div></div>
+<div class="meta-box"><div class="meta-label">Méthode</div><div class="meta-value">${payment.method}${payment.reference ? ' · Réf: ' + payment.reference : ''}</div></div>
+</div>
+<div class="amount-box"><div style="font-size:0.75rem;color:#065f46;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:4px">Montant reçu</div><div class="amount">${Number(payment.amount).toLocaleString('fr-FR', { maximumFractionDigits: 0 })} FCFA</div></div>
+<div style="margin-bottom:24px">
+<div class="info-row"><span style="color:#666">Total facture</span><span style="font-weight:700">${Number(invoice.total || 0).toLocaleString('fr-FR', { maximumFractionDigits: 0 })} FCFA</span></div>
+<div class="info-row"><span style="color:#666">Total payé (cumul)</span><span style="font-weight:700;color:#065f46">${(payments.reduce((s: number, pp: any) => s + Number(pp.amount), 0)).toLocaleString('fr-FR', { maximumFractionDigits: 0 })} FCFA</span></div>
+<div class="info-row"><span style="color:#666">Solde restant</span><span style="font-weight:700;color:${balance > 0 ? '#92400e' : '#065f46'}">${Math.max(0, balance).toLocaleString('fr-FR', { maximumFractionDigits: 0 })} FCFA</span></div>
+</div>
+${payment.notes ? `<div style="padding:12px 16px;background:#f8f5ee;border-radius:8px;font-size:0.85rem;color:#555;margin-bottom:20px"><strong>Notes:</strong> ${payment.notes}</div>` : ''}
+<div style="text-align:right;margin-top:32px"><div style="font-size:0.72rem;color:#888;font-weight:700;text-transform:uppercase;margin-bottom:8px">Signature & Cachet HUB Distribution</div><div class="sig-area">Signature autorisée</div></div>
+</div>
+<div class="footer"><span>HUB Distribution — RCCM: BZV-XXXX-XX — NIF: XXXXXXXXXX — Brazzaville, Congo</span><span>Imprimé le ${new Date().toLocaleDateString('fr-FR')}</span></div>
+</body></html>`
+    const w = window.open('', '_blank')
+    if (w) { w.document.write(html); w.document.close(); setTimeout(() => w.print(), 800) }
+  }
+
+  async function generateDeliveryNote() {
+    router.push(`/delivery-notes/new?invoice_id=${id}`)
+  }
+
   function generatePDF() {
     if (!invoice) return
     const logoUrl = '/app-icon.png'
@@ -462,7 +506,7 @@ export default function InvoiceDetailPage() {
                 </div>
                 {payments.length > 0 ? (
                   <table className="hub-table invoice-payments-table">
-                    <thead><tr><th>Date</th><th>Méthode</th><th>Référence</th><th>Montant</th></tr></thead>
+                    <thead><tr><th>Date</th><th>Méthode</th><th>Référence</th><th>Montant</th><th>Reçu</th></tr></thead>
                     <tbody>
                       {payments.map((p: any) => (
                         <tr key={p.id}>
@@ -470,6 +514,7 @@ export default function InvoiceDetailPage() {
                           <td><span className="badge badge-green">{p.method}</span></td>
                           <td style={{ color: '#666' }}>{p.reference || '—'}</td>
                           <td style={{ fontWeight: 700, color: '#065f46' }}>{Number(p.amount).toLocaleString('fr-FR', { maximumFractionDigits: 0 })} FCFA</td>
+                          <td><button type="button" className="btn-ghost" style={{ padding: '4px 10px', fontSize: '0.72rem' }} onClick={() => generateReceipt(p)}>🖨️ Reçu</button></td>
                         </tr>
                       ))}
                     </tbody>
@@ -531,6 +576,13 @@ export default function InvoiceDetailPage() {
                 {['approved', 'partial'].includes(invoice.status) && (
                   <button type="button" className="btn-primary invoice-btn invoice-btn--add-payment-aside" style={{ justifyContent: 'center', padding: '11px' }} onClick={() => { setPaymentForm(f => ({ ...f, amount: balance > 0 ? balance : 0 })); setShowPaymentModal(true) }}>
                     💳 Enregistrer un paiement
+                  </button>
+                )}
+
+                {/* Générer BL depuis facture validée */}
+                {['approved', 'partial', 'paid'].includes(invoice.status) && (
+                  <button type="button" className="btn-ghost invoice-btn" style={{ justifyContent: 'center', padding: '11px' }} onClick={generateDeliveryNote}>
+                    🚚 Générer Bon de Livraison
                   </button>
                 )}
 
