@@ -45,6 +45,9 @@ export default function NewInvoicePage() {
     payment_terms: '30 jours',
   })
   const [items, setItems] = useState<LineItem[]>([emptyLine()])
+  useEffect(() => {
+    console.log("ITEMS:", items)
+  }, [items])
   const [saving, setSaving] = useState(false)
   const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle')
   const [draftId, setDraftId] = useState<string | null>(null)
