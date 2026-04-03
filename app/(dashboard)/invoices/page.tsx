@@ -4,16 +4,18 @@ import { createClient } from '@/lib/supabase/client'
 import Link from 'next/link'
 import type { Invoice, ClientFinancialSummary } from '@/types'
 
-const statusConfig = {
-  draft:     { label: 'Brouillon', badge: 'badge-gray',  icon: '✏️' },
-  pending:   { label: 'En attente', badge: 'badge-amber', icon: '⏳' },
-  paid:      { label: 'Payée',     badge: 'badge-green', icon: '✅' },
-  cancelled: { label: 'Annulée',   badge: 'badge-red',   icon: '❌' },
+const statusConfig: Record<string, { label: string; badge: string; icon: string }> = {
+  draft:     { label: 'Brouillon',           badge: 'badge-gray',  icon: '✏️' },
+  pending:   { label: 'En attente',          badge: 'badge-amber', icon: '⏳' },
+  approved:  { label: 'Validée',             badge: 'badge-green', icon: '✅' },
+  partial:   { label: 'Partiel',             badge: 'badge-blue',  icon: '🟣' },
+  paid:      { label: 'Payée',               badge: 'badge-green', icon: '💚' },
+  cancelled: { label: 'Annulée',             badge: 'badge-red',   icon: '❌' },
 }
 
 export default function InvoicesPage() {
   const [invoices, setInvoices] = useState<any[]>([])
-  const [summary, setSummary] = useState({ total: 0, paid: 0, pending: 0, draft: 0, revenue: 0, outstanding: 0 })
+  const [summary, setSummary] = useState({ total: 0, paid: 0, pending: 0, approved: 0, partial: 0, draft: 0, revenue: 0, outstanding: 0, approvedAmount: 0, partialAmount: 0 })
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
@@ -34,9 +36,13 @@ export default function InvoicesPage() {
       total: inv.length,
       paid: inv.filter(i => i.status === 'paid').length,
       pending: inv.filter(i => i.status === 'pending').length,
+      approved: inv.filter(i => i.status === 'approved').length,
+      partial: inv.filter(i => i.status === 'partial').length,
       draft: inv.filter(i => i.status === 'draft').length,
       revenue: inv.filter(i => i.status === 'paid').reduce((s, i) => s + Number(i.total || 0), 0),
       outstanding: inv.filter(i => i.status === 'pending').reduce((s, i) => s + Number(i.total || 0), 0),
+      approvedAmount: inv.filter(i => i.status === 'approved').reduce((s, i) => s + Number(i.total || 0), 0),
+      partialAmount: inv.filter(i => i.status === 'partial').reduce((s, i) => s + Number(i.total || 0), 0),
     })
     setLoading(false)
   }, [statusFilter])
@@ -84,26 +90,31 @@ export default function InvoicesPage() {
 
       <div className="invoice-page__body" style={{ padding: '24px 32px' }}>
         {/* KPIs */}
-        <div className="invoice-list__kpis invoice-list__kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(170px,1fr))', gap: 14, marginBottom: 28 }}>
+        <div className="invoice-list__kpis invoice-list__kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(155px,1fr))', gap: 14, marginBottom: 28 }}>
           <div className="stat-card green">
             <div style={{ fontSize: '1.1rem', marginBottom: 4 }}>💵</div>
             <div className="stat-value" style={{ fontSize: '1.3rem' }}>{summary.revenue.toLocaleString('fr-FR', { maximumFractionDigits: 0 })}</div>
             <div className="stat-label">FCFA — Encaissé</div>
           </div>
           <div className="stat-card amber">
-            <div style={{ fontSize: '1.1rem', marginBottom: 4 }}>⏳</div>
-            <div className="stat-value" style={{ fontSize: '1.3rem' }}>{summary.outstanding.toLocaleString('fr-FR', { maximumFractionDigits: 0 })}</div>
-            <div className="stat-label">FCFA — En attente</div>
+            <div style={{ fontSize: '1.1rem', marginBottom: 4 }}>✅</div>
+            <div className="stat-value" style={{ fontSize: '1.3rem' }}>{summary.approvedAmount.toLocaleString('fr-FR', { maximumFractionDigits: 0 })}</div>
+            <div className="stat-label">FCFA — Validées</div>
           </div>
           <div className="stat-card blue">
-            <div style={{ fontSize: '1.1rem', marginBottom: 4 }}>✅</div>
-            <div className="stat-value">{summary.paid}</div>
-            <div className="stat-label">Factures payées</div>
+            <div style={{ fontSize: '1.1rem', marginBottom: 4 }}>🟣</div>
+            <div className="stat-value" style={{ fontSize: '1.3rem' }}>{summary.partialAmount.toLocaleString('fr-FR', { maximumFractionDigits: 0 })}</div>
+            <div className="stat-label">FCFA — Partiel</div>
           </div>
           <div className="stat-card amber">
             <div style={{ fontSize: '1.1rem', marginBottom: 4 }}>⏳</div>
             <div className="stat-value">{summary.pending}</div>
-            <div className="stat-label">En attente paiement</div>
+            <div className="stat-label">En attente</div>
+          </div>
+          <div className="stat-card green">
+            <div style={{ fontSize: '1.1rem', marginBottom: 4 }}>💚</div>
+            <div className="stat-value">{summary.paid}</div>
+            <div className="stat-label">Payées</div>
           </div>
           <div className="stat-card green">
             <div style={{ fontSize: '1.1rem', marginBottom: 4 }}>✏️</div>
@@ -123,7 +134,10 @@ export default function InvoicesPage() {
               { key: 'all', label: 'Toutes' },
               { key: 'draft', label: '✏️ Brouillon' },
               { key: 'pending', label: '⏳ En attente' },
-              { key: 'paid', label: '✅ Payées' },
+              { key: 'approved', label: '✅ Validées' },
+              { key: 'partial', label: '🟣 Partiel' },
+              { key: 'paid', label: '💚 Payées' },
+              { key: 'cancelled', label: '❌ Annulées' },
             ].map(f => (
               <button
                 key={f.key}
@@ -147,12 +161,12 @@ export default function InvoicesPage() {
           ) : (
             <table className="hub-table invoice-list__table">
               <thead>
-                <tr><th>N° Facture</th><th>Client</th><th>Date</th><th>Échéance</th><th>Montant TTC</th><th>Statut</th><th>Actions</th></tr>
+                <tr><th>N° Facture</th><th>Client</th><th>Date</th><th>Échéance</th><th>Montant TTC</th><th>Payé</th><th>Statut</th><th>Actions</th></tr>
               </thead>
               <tbody>
                 {filtered.map(inv => {
-                  const cfg = statusConfig[inv.status as keyof typeof statusConfig]
-                  const isOverdue = inv.status === 'pending' && inv.due_date && new Date(inv.due_date) < new Date()
+                  const cfg = statusConfig[inv.status] || statusConfig.draft
+                  const isOverdue = ['pending', 'approved', 'partial'].includes(inv.status) && inv.due_date && new Date(inv.due_date) < new Date()
                   return (
                     <tr key={inv.id} className="invoice-list__row">
                       <td>
@@ -173,6 +187,9 @@ export default function InvoicesPage() {
                         <div style={{ fontWeight: 700, fontSize: '0.95rem' }}>{Number(inv.total || 0).toLocaleString('fr-FR', { maximumFractionDigits: 0 })} FCFA</div>
                         {inv.discount > 0 && <div style={{ fontSize: '0.72rem', color: '#999' }}>Remise: {Number(inv.discount).toLocaleString()} FCFA</div>}
                       </td>
+                      <td className="invoice-list__cell invoice-list__cell--paid" style={{ fontSize: '0.85rem', color: inv.status === 'paid' ? '#065f46' : '#666' }}>
+                        {inv.status === 'paid' ? '✅' : inv.status === 'partial' ? '🟣' : '—'}
+                      </td>
                       <td><span className={`badge ${cfg.badge}`}>{cfg.icon} {cfg.label}</span></td>
                       <td>
                         <div className="invoice-list__row-actions" style={{ display: 'flex', gap: 6 }}>
@@ -184,7 +201,7 @@ export default function InvoicesPage() {
                   )
                 })}
                 {filtered.length === 0 && (
-                  <tr><td colSpan={7} className="invoice-state invoice-state--empty" style={{ textAlign: 'center', padding: 48, color: '#999' }}>
+                  <tr><td colSpan={8} className="invoice-state invoice-state--empty" style={{ textAlign: 'center', padding: 48, color: '#999' }}>
                     <span className="invoice-state__message">{search ? `Aucun résultat pour "${search}"` : 'Aucune facture'}</span>
                     {!search && <div style={{ marginTop: 12 }}><Link href="/invoices/new" className="btn-primary invoice-btn invoice-btn--new-first" style={{ textDecoration: 'none' }}>+ Créer la première facture</Link></div>}
                   </td></tr>

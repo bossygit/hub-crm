@@ -6,7 +6,7 @@ export type SaleStatus = 'draft' | 'pending' | 'approved' | 'rejected' | 'cancel
 export type EmployeeStatus = 'actif' | 'conge' | 'suspendu' | 'sorti'
 
 export interface Profile {
-  id: string; full_name?: string; role: UserRole; department?: string; phone?: string; created_at: string
+  id: string; full_name?: string; role: UserRole; department?: string; phone?: string; can_validate_invoices?: boolean; created_at: string
 }
 export interface Client {
   id: string; name: string; type: ClientType; email?: string; phone?: string; address?: string; tax_id?: string; notes?: string; created_at: string; updated_at?: string
@@ -46,7 +46,7 @@ export interface DocumentRequest {
 }
 
 // ── FACTURATION ─────────────────────────────────────
-export type InvoiceStatus = 'draft' | 'pending' | 'paid' | 'cancelled'
+export type InvoiceStatus = 'draft' | 'pending' | 'approved' | 'partial' | 'paid' | 'cancelled'
 
 export interface InvoiceItem {
   id?: string

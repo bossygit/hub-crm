@@ -175,7 +175,7 @@ export default function NewInvoicePage() {
   }
 
   // ── SAUVEGARDE PRINCIPALE (boutons) ──
-  async function handleSave(targetStatus: 'draft' | 'pending' | 'paid') {
+  async function handleSave(targetStatus: 'draft' | 'pending') {
     if (!form.invoice_number) return
     const validItems = items.filter(it => it.name.trim() && it.quantity > 0 && it.unit_price >= 0)
     if (validItems.length === 0) { alert('Ajoutez au moins une ligne avec un nom et une quantité.'); return }
@@ -201,7 +201,6 @@ export default function NewInvoicePage() {
         tax_rate: form.tax_rate, tax_amount: ta, total: ad + ta,
         notes: form.notes, payment_terms: form.payment_terms,
         created_by: userData.user?.id,
-        ...(targetStatus === 'paid' ? { validated_by: userData.user?.id } : {}),
         updated_at: new Date().toISOString(),
       }
 
@@ -289,7 +288,6 @@ export default function NewInvoicePage() {
           {autoSaveStatus === 'saved'  && <span className="invoice-form__autosave invoice-form__autosave--saved" style={{ fontSize: '0.78rem', color: '#065f46' }}>✓ Sauvegardé</span>}
           <button type="button" className="btn-ghost invoice-btn invoice-btn--save-draft" onClick={() => handleSave('draft')}   disabled={saving}>💾 Brouillon</button>
           <button type="button" className="btn-amber invoice-btn invoice-btn--save-pending" onClick={() => handleSave('pending')} disabled={saving}>📤 Soumettre</button>
-          <button type="button" className="btn-primary invoice-btn invoice-btn--save-paid" onClick={() => handleSave('paid')}    disabled={saving}>✅ Valider & Payer</button>
         </div>
       </div>
 
@@ -513,12 +511,9 @@ export default function NewInvoicePage() {
                 <button type="button" className="btn-amber invoice-btn invoice-btn--save-pending-aside" style={{ justifyContent: 'center', padding: '11px' }} onClick={() => handleSave('pending')} disabled={saving}>
                   {saving ? '⏳ Sauvegarde...' : '📤 Soumettre pour validation'}
                 </button>
-                <button type="button" className="btn-primary invoice-btn invoice-btn--save-paid-aside" style={{ justifyContent: 'center', padding: '11px' }} onClick={() => handleSave('paid')} disabled={saving}>
-                  {saving ? '⏳ Sauvegarde...' : '✅ Valider & Marquer Payée'}
-                </button>
               </div>
               <div className="invoice-form__sidebar-hint" style={{ marginTop: 12, padding: '8px 10px', background: '#f8f5ee', borderRadius: 6, fontSize: '0.72rem', color: '#666' }}>
-                ⚠️ La validation décrémente le stock automatiquement et génère la facture définitive.
+                ℹ️ La facture devra etre validee par un administrateur avant de pouvoir enregistrer des paiements. La validation declenche le decrement du stock.
               </div>
             </div>
           </div>

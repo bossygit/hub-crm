@@ -4,11 +4,13 @@ import { createClient } from '@/lib/supabase/client'
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
 
-const statusConfig = {
-  draft:     { label: 'Brouillon',    badge: 'badge-gray',  icon: '✏️', color: '#666' },
-  pending:   { label: 'En attente',   badge: 'badge-amber', icon: '⏳', color: '#92400e' },
-  paid:      { label: 'Payée',        badge: 'badge-green', icon: '✅', color: '#065f46' },
-  cancelled: { label: 'Annulée',      badge: 'badge-red',   icon: '❌', color: '#991b1b' },
+const statusConfig: Record<string, { label: string; badge: string; icon: string; color: string }> = {
+  draft:     { label: 'Brouillon',           badge: 'badge-gray',   icon: '✏️', color: '#666' },
+  pending:   { label: 'En attente',          badge: 'badge-amber',  icon: '⏳', color: '#92400e' },
+  approved:  { label: 'Validée',             badge: 'badge-green',  icon: '✅', color: '#065f46' },
+  partial:   { label: 'Partiellement payée', badge: 'badge-blue',   icon: '🟣', color: '#5b21b6' },
+  paid:      { label: 'Payée',               badge: 'badge-green',  icon: '💚', color: '#065f46' },
+  cancelled: { label: 'Annulée',             badge: 'badge-red',    icon: '❌', color: '#991b1b' },
 }
 
 export default function InvoiceDetailPage() {
@@ -25,7 +27,16 @@ export default function InvoiceDetailPage() {
   const [showPaymentModal, setShowPaymentModal] = useState(false)
   const [paymentForm, setPaymentForm] = useState({ amount: 0, payment_date: new Date().toISOString().split('T')[0], method: 'virement', reference: '', notes: '' })
   const [saving, setSaving] = useState(false)
+  const [canValidate, setCanValidate] = useState(false)
   const supabase = createClient()
+
+  async function loadPermission() {
+    const { data: userData } = await supabase.auth.getUser()
+    if (userData.user) {
+      const { data: profile } = await supabase.from('profiles').select('can_validate_invoices').eq('id', userData.user.id).single()
+      setCanValidate(profile?.can_validate_invoices === true)
+    }
+  }
 
   async function load() {
     setLoading(true)
@@ -46,15 +57,14 @@ export default function InvoiceDetailPage() {
     setLoading(false)
   }
 
-  useEffect(() => { load() }, [id])
+  useEffect(() => { load(); loadPermission() }, [id])
 
   async function updateStatus(status: string) {
     setUpdating(true)
     const { data: userData } = await supabase.auth.getUser()
-    const { error } = await supabase.from('invoices').update({
-      status, updated_at: new Date().toISOString(),
-      ...(status === 'paid' ? { validated_by: userData.user?.id } : {}),
-    }).eq('id', id)
+    const extra: Record<string, unknown> = { updated_at: new Date().toISOString() }
+    if (status === 'approved') extra.validated_by = userData.user?.id
+    const { error } = await supabase.from('invoices').update({ status, ...extra }).eq('id', id)
     if (error) alert('Erreur: ' + error.message)
     else load()
     setUpdating(false)
@@ -64,16 +74,17 @@ export default function InvoiceDetailPage() {
     e.preventDefault(); setSaving(true)
     const { data: userData } = await supabase.auth.getUser()
     await supabase.from('invoice_payments').insert({ ...paymentForm, invoice_id: id, created_by: userData.user?.id })
-    // Si le montant couvre le total, marquer comme payé
-    const totalPaid = payments.reduce((s, p) => s + p.amount, 0) + paymentForm.amount
-    if (totalPaid >= (invoice?.total || 0)) await supabase.from('invoices').update({ status: 'paid' }).eq('id', id)
+    const totalPaid = payments.reduce((s, p) => s + Number(p.amount), 0) + paymentForm.amount
+    const invoiceTotal = Number(invoice?.total || 0)
+    const newStatus = totalPaid >= invoiceTotal ? 'paid' : 'partial'
+    await supabase.from('invoices').update({ status: newStatus, updated_at: new Date().toISOString() }).eq('id', id)
     setSaving(false); setShowPaymentModal(false); load()
   }
 
   function generatePDF() {
     if (!invoice) return
     const logoUrl = '/app-icon.png'
-    const statusCfg = statusConfig[invoice.status as keyof typeof statusConfig]
+    const statusCfg = statusConfig[invoice.status] || statusConfig.draft
     const totalPaid = payments.reduce((s, p) => s + Number(p.amount), 0)
     const balance = Number(invoice.total || 0) - totalPaid
 
@@ -159,9 +170,12 @@ export default function InvoiceDetailPage() {
 
   /* Status ribbon */
   .status-ribbon { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; }
-  .status-paid { background: #d1fae5; color: #065f46; }
-  .status-pending { background: #fef3c7; color: #92400e; }
   .status-draft { background: #f3f4f6; color: #374151; }
+  .status-pending { background: #fef3c7; color: #92400e; }
+  .status-approved { background: #d1fae5; color: #065f46; }
+  .status-partial { background: #dbeafe; color: #1e40af; }
+  .status-paid { background: #d1fae5; color: #065f46; }
+  .status-cancelled { background: #fee2e2; color: #991b1b; }
 </style>
 </head>
 <body class="invoice-pdf">
@@ -310,10 +324,10 @@ export default function InvoiceDetailPage() {
   if (loading) return <div className="invoice-state invoice-state--loading" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh', color: '#999' }}><span className="invoice-state__message">Chargement...</span></div>
   if (!invoice) return <div className="invoice-state invoice-state--empty" style={{ padding: 40, textAlign: 'center', color: '#999' }}><span className="invoice-state__message">Facture introuvable</span></div>
 
-  const statusCfg = statusConfig[invoice.status as keyof typeof statusConfig]
+  const statusCfg = statusConfig[invoice.status] || statusConfig.draft
   const totalPaid = payments.reduce((s: number, p: any) => s + Number(p.amount), 0)
   const balance = Number(invoice.total || 0) - totalPaid
-  const isOverdue = invoice.status === 'pending' && invoice.due_date && new Date(invoice.due_date) < new Date()
+  const isOverdue = ['pending', 'approved', 'partial'].includes(invoice.status) && invoice.due_date && new Date(invoice.due_date) < new Date()
 
   return (
     <div className="invoice-page invoice-page--detail">
@@ -329,6 +343,11 @@ export default function InvoiceDetailPage() {
           <Link href={`/invoices/new?duplicate=${invoice.id}`} className="btn-ghost invoice-btn invoice-btn--duplicate" style={{ textDecoration: 'none' }}>📋 Dupliquer</Link>
           {invoice.status === 'draft' && (
             <Link href={`/invoices/${invoice.id}/edit`} className="btn-amber invoice-btn invoice-btn--edit" style={{ textDecoration: 'none' }}>✏️ Modifier</Link>
+          )}
+          {invoice.status === 'pending' && canValidate && (
+            <button type="button" className="btn-primary invoice-btn invoice-btn--approve" onClick={() => updateStatus('approved')} disabled={updating}>
+              ✅ Valider
+            </button>
           )}
         </div>
       </div>
@@ -431,11 +450,11 @@ export default function InvoiceDetailPage() {
             </div>
 
             {/* Paiements */}
-            {(payments.length > 0 || invoice.status === 'pending') && (
+            {(payments.length > 0 || ['approved', 'partial', 'pending'].includes(invoice.status)) && (
               <div className="invoice-section invoice-section--payments" style={{ background: 'white', borderRadius: 12, border: '1px solid #e8e4db', overflow: 'hidden' }}>
                 <div className="invoice-section__header invoice-payments__toolbar" style={{ padding: '14px 20px', borderBottom: '1px solid #f0ece4', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div className="invoice-section__title" style={{ fontWeight: 700, color: 'var(--hub-green)', fontSize: '0.875rem' }}>💳 Paiements</div>
-                  {invoice.status !== 'paid' && (
+                  {['approved', 'partial'].includes(invoice.status) && (
                     <button type="button" className="btn-primary invoice-btn invoice-btn--add-payment-inline" style={{ padding: '6px 14px', fontSize: '0.8rem' }} onClick={() => { setPaymentForm(f => ({ ...f, amount: balance > 0 ? balance : 0 })); setShowPaymentModal(true) }}>
                       + Enregistrer paiement
                     </button>
@@ -483,23 +502,46 @@ export default function InvoiceDetailPage() {
               <div className="invoice-section__title" style={{ fontWeight: 700, color: 'var(--hub-green)', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 12 }}>Actions</div>
               <div className="invoice-detail-actions" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 <button type="button" className="btn-primary invoice-btn invoice-btn--print-pdf-aside" style={{ justifyContent: 'center', padding: '11px' }} onClick={generatePDF}>🖨️ Imprimer / Télécharger PDF</button>
+
+                {/* DRAFT : soumettre */}
                 {invoice.status === 'draft' && (
                   <button type="button" className="btn-amber invoice-btn invoice-btn--submit-detail" style={{ justifyContent: 'center', padding: '11px' }} onClick={() => updateStatus('pending')} disabled={updating}>
                     📤 Soumettre pour validation
                   </button>
                 )}
-                {invoice.status === 'pending' && (
-                  <>
-                    <button type="button" className="btn-primary invoice-btn invoice-btn--mark-paid" style={{ justifyContent: 'center', padding: '11px', background: '#065f46' }} onClick={() => updateStatus('paid')} disabled={updating}>
-                      ✅ Marquer comme Payée
-                    </button>
-                    <button type="button" className="btn-ghost invoice-btn invoice-btn--add-payment-aside" style={{ justifyContent: 'center', padding: '11px' }} onClick={() => { setPaymentForm(f => ({ ...f, amount: balance })); setShowPaymentModal(true) }}>
-                      💳 Enregistrer un paiement
-                    </button>
-                  </>
+
+                {/* PENDING : valider (si permission) / rejeter */}
+                {invoice.status === 'pending' && canValidate && (
+                  <button type="button" className="btn-primary invoice-btn invoice-btn--approve-aside" style={{ justifyContent: 'center', padding: '11px', background: '#065f46' }} onClick={() => updateStatus('approved')} disabled={updating}>
+                    ✅ Valider la facture
+                  </button>
                 )}
-                {invoice.status !== 'cancelled' && invoice.status !== 'paid' && (
-                  <button type="button" className="btn-danger invoice-btn invoice-btn--cancel-invoice" style={{ padding: '10px', justifyContent: 'center' }} onClick={() => { if (confirm('Annuler cette facture ?')) updateStatus('cancelled') }}>
+                {invoice.status === 'pending' && canValidate && (
+                  <button type="button" className="btn-ghost invoice-btn invoice-btn--reject" style={{ justifyContent: 'center', padding: '11px' }} onClick={() => { if (confirm('Rejeter cette facture ? Elle retournera en brouillon.')) updateStatus('draft') }} disabled={updating}>
+                    ↩️ Rejeter (retour brouillon)
+                  </button>
+                )}
+                {invoice.status === 'pending' && !canValidate && (
+                  <div style={{ padding: '10px 14px', background: '#fef3c7', borderRadius: 8, fontSize: '0.78rem', color: '#92400e', textAlign: 'center' }}>
+                    ⏳ En attente de validation par un administrateur
+                  </div>
+                )}
+
+                {/* APPROVED / PARTIAL : enregistrer paiement */}
+                {['approved', 'partial'].includes(invoice.status) && (
+                  <button type="button" className="btn-primary invoice-btn invoice-btn--add-payment-aside" style={{ justifyContent: 'center', padding: '11px' }} onClick={() => { setPaymentForm(f => ({ ...f, amount: balance > 0 ? balance : 0 })); setShowPaymentModal(true) }}>
+                    💳 Enregistrer un paiement
+                  </button>
+                )}
+
+                {/* Annuler : possible depuis draft, pending, approved, partial */}
+                {['draft', 'pending', 'approved', 'partial'].includes(invoice.status) && (
+                  <button type="button" className="btn-danger invoice-btn invoice-btn--cancel-invoice" style={{ padding: '10px', justifyContent: 'center' }} onClick={() => {
+                    const msg = ['approved', 'partial'].includes(invoice.status)
+                      ? 'Annuler cette facture ? Le stock sera automatiquement restauré.'
+                      : 'Annuler cette facture ?'
+                    if (confirm(msg)) updateStatus('cancelled')
+                  }} disabled={updating}>
                     ❌ Annuler la facture
                   </button>
                 )}
