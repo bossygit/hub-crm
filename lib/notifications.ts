@@ -72,7 +72,7 @@ export async function createNotification(params: {
       if (!email) continue
       try {
         await resend.emails.send({
-          from: 'HUB Distribution <notifications@hubdistribution.com>',
+          from: 'HUB Distribution <contact@hub-distribution.com>',
           to: email,
           subject: `${typeIcons[params.type]} ${params.title}`,
           html: `
