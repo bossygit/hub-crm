@@ -44,3 +44,68 @@ export interface Candidate {
 export interface DocumentRequest {
   id: string; requester_name: string; organization: string; email: string; phone?: string; document_type: string; description?: string; status: 'pending' | 'processing' | 'approved' | 'rejected'; response_notes?: string; document_url?: string; created_at: string; updated_at?: string
 }
+
+// ── FACTURATION ─────────────────────────────────────
+export type InvoiceStatus = 'draft' | 'pending' | 'paid' | 'cancelled'
+
+export interface InvoiceItem {
+  id?: string
+  invoice_id?: string
+  product_id?: string | null
+  product?: Product
+  name: string
+  description?: string
+  quantity: number
+  unit: string
+  unit_price: number
+  tax_rate: number
+  subtotal?: number
+  sort_order?: number
+}
+
+export interface Invoice {
+  id: string
+  invoice_number: string
+  client_id?: string
+  client?: Client
+  date: string
+  due_date?: string
+  status: InvoiceStatus
+  subtotal: number
+  discount: number
+  tax_rate: number
+  tax_amount: number
+  total: number
+  notes?: string
+  payment_terms?: string
+  payment_method?: string
+  created_by?: string
+  creator?: Profile
+  validated_by?: string
+  validated_at?: string
+  created_at: string
+  updated_at?: string
+  items?: InvoiceItem[]
+}
+
+export interface InvoicePayment {
+  id: string
+  invoice_id: string
+  amount: number
+  payment_date: string
+  method: string
+  reference?: string
+  notes?: string
+  created_at: string
+}
+
+export interface ClientFinancialSummary {
+  client_id: string
+  client_name: string
+  email?: string
+  total_invoices: number
+  total_ordered: number
+  total_paid: number
+  balance_due: number
+  last_invoice_date?: string
+}

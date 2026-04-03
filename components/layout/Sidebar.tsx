@@ -16,7 +16,8 @@ const nav = [
   {
     section: 'Opérations',
     items: [
-      { href: '/sales', icon: '💰', label: 'Ventes & Facturation' },
+      { href: '/invoices', icon: '🧾', label: 'Facturation' },
+      { href: '/sales', icon: '💰', label: 'Commandes / Ventes' },
       { href: '/stock', icon: '📦', label: 'Gestion de Stock' },
       { href: '/clients', icon: '👥', label: 'Clients & Partenaires' },
     ]
