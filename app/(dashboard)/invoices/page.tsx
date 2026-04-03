@@ -76,15 +76,15 @@ export default function InvoicesPage() {
   })
 
   return (
-    <div>
-      <div className="page-header">
+    <div className="invoice-page invoice-page--list">
+      <div className="page-header invoice-page__toolbar">
         <h2>🧾 Facturation</h2>
-        <Link href="/invoices/new" className="btn-primary" style={{ textDecoration: 'none' }}>+ Nouvelle facture</Link>
+        <Link href="/invoices/new" className="btn-primary invoice-btn invoice-btn--new" style={{ textDecoration: 'none' }}>+ Nouvelle facture</Link>
       </div>
 
-      <div style={{ padding: '24px 32px' }}>
+      <div className="invoice-page__body" style={{ padding: '24px 32px' }}>
         {/* KPIs */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(170px,1fr))', gap: 14, marginBottom: 28 }}>
+        <div className="invoice-list__kpis" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(170px,1fr))', gap: 14, marginBottom: 28 }}>
           <div className="stat-card green">
             <div style={{ fontSize: '1.1rem', marginBottom: 4 }}>💵</div>
             <div className="stat-value" style={{ fontSize: '1.3rem' }}>{summary.revenue.toLocaleString('fr-FR', { maximumFractionDigits: 0 })}</div>
@@ -113,19 +113,23 @@ export default function InvoicesPage() {
         </div>
 
         {/* Filtres + Recherche */}
-        <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
-          <div style={{ position: 'relative', flex: 1, maxWidth: 320 }}>
-            <input className="hub-input" placeholder="🔍 Numéro, client..." value={search}
+        <div className="invoice-list__filters" style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
+          <div className="invoice-list__search" style={{ position: 'relative', flex: 1, maxWidth: 320 }}>
+            <input className="hub-input invoice-field invoice-field--search" placeholder="🔍 Numéro, client..." value={search}
               onChange={e => setSearch(e.target.value)} style={{ paddingLeft: 16 }} />
           </div>
-          <div style={{ display: 'flex', gap: 0, background: '#f0ece4', borderRadius: 8, padding: 3 }}>
+          <div className="invoice-list__filter-bar" style={{ display: 'flex', gap: 0, background: '#f0ece4', borderRadius: 8, padding: 3 }}>
             {[
               { key: 'all', label: 'Toutes' },
               { key: 'draft', label: '✏️ Brouillon' },
               { key: 'pending', label: '⏳ En attente' },
               { key: 'paid', label: '✅ Payées' },
             ].map(f => (
-              <button key={f.key} onClick={() => setStatusFilter(f.key)}
+              <button
+                key={f.key}
+                type="button"
+                className={`invoice-btn invoice-btn--filter${statusFilter === f.key ? ' invoice-btn--filter-active' : ''}`}
+                onClick={() => setStatusFilter(f.key)}
                 style={{ padding: '7px 14px', borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: '0.8rem', whiteSpace: 'nowrap',
                   background: statusFilter === f.key ? 'white' : 'transparent',
                   color: statusFilter === f.key ? 'var(--hub-green)' : '#666',
@@ -137,11 +141,11 @@ export default function InvoicesPage() {
         </div>
 
         {/* Table */}
-        <div style={{ background: 'white', borderRadius: 12, border: '1px solid #e8e4db', overflow: 'hidden' }}>
+        <div className="invoice-list__table-wrap" style={{ background: 'white', borderRadius: 12, border: '1px solid #e8e4db', overflow: 'hidden' }}>
           {loading ? (
-            <div style={{ padding: 48, textAlign: 'center', color: '#999' }}>Chargement...</div>
+            <div className="invoice-state invoice-state--loading" style={{ padding: 48, textAlign: 'center', color: '#999' }}>Chargement...</div>
           ) : (
-            <table className="hub-table">
+            <table className="hub-table invoice-list__table">
               <thead>
                 <tr><th>N° Facture</th><th>Client</th><th>Date</th><th>Échéance</th><th>Montant TTC</th><th>Statut</th><th>Actions</th></tr>
               </thead>
@@ -152,7 +156,7 @@ export default function InvoicesPage() {
                   return (
                     <tr key={inv.id}>
                       <td>
-                        <Link href={`/invoices/${inv.id}`} style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--hub-green-mid)', textDecoration: 'none', fontSize: '0.9rem' }}>
+                        <Link className="invoice-list__invoice-link" href={`/invoices/${inv.id}`} style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--hub-green-mid)', textDecoration: 'none', fontSize: '0.9rem' }}>
                           {inv.invoice_number}
                         </Link>
                       </td>
@@ -171,18 +175,18 @@ export default function InvoicesPage() {
                       </td>
                       <td><span className={`badge ${cfg.badge}`}>{cfg.icon} {cfg.label}</span></td>
                       <td>
-                        <div style={{ display: 'flex', gap: 6 }}>
-                          <Link href={`/invoices/${inv.id}`} className="btn-ghost" style={{ padding: '5px 10px', fontSize: '0.75rem', textDecoration: 'none' }}>Voir</Link>
-                          <Link href={`/invoices/new?duplicate=${inv.id}`} className="btn-ghost" style={{ padding: '5px 10px', fontSize: '0.75rem', textDecoration: 'none' }}>📋 Dupliquer</Link>
+                        <div className="invoice-list__row-actions" style={{ display: 'flex', gap: 6 }}>
+                          <Link href={`/invoices/${inv.id}`} className="btn-ghost invoice-btn invoice-btn--view-row" style={{ padding: '5px 10px', fontSize: '0.75rem', textDecoration: 'none' }}>Voir</Link>
+                          <Link href={`/invoices/new?duplicate=${inv.id}`} className="btn-ghost invoice-btn invoice-btn--duplicate-row" style={{ padding: '5px 10px', fontSize: '0.75rem', textDecoration: 'none' }}>📋 Dupliquer</Link>
                         </div>
                       </td>
                     </tr>
                   )
                 })}
                 {filtered.length === 0 && (
-                  <tr><td colSpan={7} style={{ textAlign: 'center', padding: 48, color: '#999' }}>
+                  <tr><td colSpan={7} className="invoice-state invoice-state--empty" style={{ textAlign: 'center', padding: 48, color: '#999' }}>
                     {search ? `Aucun résultat pour "${search}"` : 'Aucune facture'}
-                    {!search && <div style={{ marginTop: 12 }}><Link href="/invoices/new" className="btn-primary" style={{ textDecoration: 'none' }}>+ Créer la première facture</Link></div>}
+                    {!search && <div style={{ marginTop: 12 }}><Link href="/invoices/new" className="btn-primary invoice-btn invoice-btn--new-first" style={{ textDecoration: 'none' }}>+ Créer la première facture</Link></div>}
                   </td></tr>
                 )}
               </tbody>

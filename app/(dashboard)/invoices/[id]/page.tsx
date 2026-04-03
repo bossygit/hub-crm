@@ -307,8 +307,8 @@ export default function InvoiceDetailPage() {
     }
   }
 
-  if (loading) return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh', color: '#999' }}>Chargement...</div>
-  if (!invoice) return <div style={{ padding: 40, textAlign: 'center', color: '#999' }}>Facture introuvable</div>
+  if (loading) return <div className="invoice-state invoice-state--loading" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh', color: '#999' }}>Chargement...</div>
+  if (!invoice) return <div className="invoice-state invoice-state--empty" style={{ padding: 40, textAlign: 'center', color: '#999' }}>Facture introuvable</div>
 
   const statusCfg = statusConfig[invoice.status as keyof typeof statusConfig]
   const totalPaid = payments.reduce((s: number, p: any) => s + Number(p.amount), 0)
@@ -316,33 +316,33 @@ export default function InvoiceDetailPage() {
   const isOverdue = invoice.status === 'pending' && invoice.due_date && new Date(invoice.due_date) < new Date()
 
   return (
-    <div>
-      <div className="page-header">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <button onClick={() => router.back()} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.2rem', color: 'var(--hub-green)' }}>←</button>
+    <div className="invoice-page invoice-page--detail">
+      <div className="page-header invoice-page__toolbar">
+        <div className="invoice-page__header-title" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <button type="button" className="invoice-btn invoice-btn--back" onClick={() => router.back()} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.2rem', color: 'var(--hub-green)' }}>←</button>
           <h2>🧾 {invoice.invoice_number}</h2>
           <span className={`badge ${statusCfg.badge}`}>{statusCfg.icon} {statusCfg.label}</span>
           {isOverdue && <span className="badge badge-red">⚠️ En retard</span>}
         </div>
-        <div style={{ display: 'flex', gap: 10 }}>
-          <button className="btn-ghost" onClick={generatePDF}>🖨️ Imprimer / PDF</button>
-          <Link href={`/invoices/new?duplicate=${invoice.id}`} className="btn-ghost" style={{ textDecoration: 'none' }}>📋 Dupliquer</Link>
+        <div className="invoice-page__header-actions" style={{ display: 'flex', gap: 10 }}>
+          <button type="button" className="btn-ghost invoice-btn invoice-btn--print-pdf" onClick={generatePDF}>🖨️ Imprimer / PDF</button>
+          <Link href={`/invoices/new?duplicate=${invoice.id}`} className="btn-ghost invoice-btn invoice-btn--duplicate" style={{ textDecoration: 'none' }}>📋 Dupliquer</Link>
           {invoice.status === 'draft' && (
-            <Link href={`/invoices/${invoice.id}/edit`} className="btn-amber" style={{ textDecoration: 'none' }}>✏️ Modifier</Link>
+            <Link href={`/invoices/${invoice.id}/edit`} className="btn-amber invoice-btn invoice-btn--edit" style={{ textDecoration: 'none' }}>✏️ Modifier</Link>
           )}
         </div>
       </div>
 
-      <div style={{ padding: '24px 32px', maxWidth: 1100, margin: '0 auto' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 24, alignItems: 'start' }}>
+      <div className="invoice-page__body" style={{ padding: '24px 32px', maxWidth: 1100, margin: '0 auto' }}>
+        <div className="invoice-page__layout" style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 24, alignItems: 'start' }}>
 
           {/* Colonne principale */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+          <div className="invoice-page__main" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
 
             {/* Infos + Client */}
-            <div style={{ background: 'white', borderRadius: 12, border: '1px solid #e8e4db', overflow: 'hidden' }}>
+            <div className="invoice-section invoice-section--header-card" style={{ background: 'white', borderRadius: 12, border: '1px solid #e8e4db', overflow: 'hidden' }}>
               {/* Mini header style PDF */}
-              <div style={{ background: 'var(--hub-green)', padding: '20px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div className="invoice-detail-card__banner" style={{ background: 'var(--hub-green)', padding: '20px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, color: 'white' }}>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src="/app-icon.png" alt="Logo" width={40} height={40} style={{ borderRadius: 8, background: 'rgba(255,255,255,0.1)' }} onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />
@@ -357,14 +357,14 @@ export default function InvoiceDetailPage() {
                 </div>
               </div>
 
-              <div style={{ padding: '20px 24px' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16, marginBottom: 20 }}>
+              <div className="invoice-section__body" style={{ padding: '20px 24px' }}>
+                <div className="invoice-detail-meta invoice-form-grid invoice-form-grid--meta" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16, marginBottom: 20 }}>
                   {[
                     ['Date', new Date(invoice.date).toLocaleDateString('fr-FR')],
                     ['Échéance', invoice.due_date ? new Date(invoice.due_date).toLocaleDateString('fr-FR') : '—'],
                     ['Conditions', invoice.payment_terms || '30 jours'],
                   ].map(([label, val]) => (
-                    <div key={label} style={{ background: '#f8f5ee', padding: '12px 14px', borderRadius: 8 }}>
+                    <div key={label} className="invoice-detail-meta__cell" style={{ background: '#f8f5ee', padding: '12px 14px', borderRadius: 8 }}>
                       <div style={{ fontSize: '0.65rem', textTransform: 'uppercase', letterSpacing: '0.1em', color: '#888', fontWeight: 700, marginBottom: 3 }}>{label}</div>
                       <div style={{ fontWeight: 600, color: 'var(--hub-green)' }}>{val}</div>
                     </div>
@@ -373,7 +373,7 @@ export default function InvoiceDetailPage() {
 
                 {/* Client */}
                 {invoice.client && (
-                  <div style={{ padding: '14px 18px', borderLeft: '4px solid var(--hub-green-mid)', background: '#f8f5ee', borderRadius: '0 8px 8px 0', marginBottom: 0 }}>
+                  <div className="invoice-detail-client" style={{ padding: '14px 18px', borderLeft: '4px solid var(--hub-green-mid)', background: '#f8f5ee', borderRadius: '0 8px 8px 0', marginBottom: 0 }}>
                     <div style={{ fontSize: '0.65rem', textTransform: 'uppercase', letterSpacing: '0.1em', color: '#888', fontWeight: 700, marginBottom: 4 }}>Facturé à</div>
                     <div style={{ fontWeight: 700, fontSize: '1rem', color: 'var(--hub-green)' }}>{invoice.client.name}</div>
                     {invoice.client.email && <div style={{ fontSize: '0.8rem', color: '#666' }}>📧 {invoice.client.email}</div>}
@@ -385,11 +385,11 @@ export default function InvoiceDetailPage() {
             </div>
 
             {/* Lignes articles */}
-            <div style={{ background: 'white', borderRadius: 12, border: '1px solid #e8e4db', overflow: 'hidden' }}>
-              <div style={{ padding: '14px 20px', borderBottom: '1px solid #f0ece4', fontWeight: 700, color: 'var(--hub-green)', fontSize: '0.875rem' }}>
+            <div className="invoice-section invoice-section--lines-detail" style={{ background: 'white', borderRadius: 12, border: '1px solid #e8e4db', overflow: 'hidden' }}>
+              <div className="invoice-section__title" style={{ padding: '14px 20px', borderBottom: '1px solid #f0ece4', fontWeight: 700, color: 'var(--hub-green)', fontSize: '0.875rem' }}>
                 📦 Articles
               </div>
-              <table className="hub-table">
+              <table className="hub-table invoice-detail-items-table">
                 <thead>
                   <tr><th>Désignation</th><th>Qté</th><th>Unité</th><th>Prix unit.</th><th>Total HT</th></tr>
                 </thead>
@@ -411,8 +411,8 @@ export default function InvoiceDetailPage() {
               </table>
 
               {/* Totaux */}
-              <div style={{ padding: '16px 20px', background: '#f8f5ee', display: 'flex', justifyContent: 'flex-end' }}>
-                <div style={{ width: 300 }}>
+              <div className="invoice-detail-totals" style={{ padding: '16px 20px', background: '#f8f5ee', display: 'flex', justifyContent: 'flex-end' }}>
+                <div className="invoice-detail-totals__inner" style={{ width: 300 }}>
                   {[
                     ['Sous-total HT', `${Number(invoice.subtotal || 0).toLocaleString('fr-FR', { maximumFractionDigits: 0 })} FCFA`],
                     ...(Number(invoice.discount) > 0 ? [['Remise', `- ${Number(invoice.discount).toLocaleString('fr-FR', { maximumFractionDigits: 0 })} FCFA`]] : []),
@@ -432,17 +432,17 @@ export default function InvoiceDetailPage() {
 
             {/* Paiements */}
             {(payments.length > 0 || invoice.status === 'pending') && (
-              <div style={{ background: 'white', borderRadius: 12, border: '1px solid #e8e4db', overflow: 'hidden' }}>
-                <div style={{ padding: '14px 20px', borderBottom: '1px solid #f0ece4', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div style={{ fontWeight: 700, color: 'var(--hub-green)', fontSize: '0.875rem' }}>💳 Paiements</div>
+              <div className="invoice-section invoice-section--payments" style={{ background: 'white', borderRadius: 12, border: '1px solid #e8e4db', overflow: 'hidden' }}>
+                <div className="invoice-section__header invoice-payments__toolbar" style={{ padding: '14px 20px', borderBottom: '1px solid #f0ece4', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div className="invoice-section__title" style={{ fontWeight: 700, color: 'var(--hub-green)', fontSize: '0.875rem' }}>💳 Paiements</div>
                   {invoice.status !== 'paid' && (
-                    <button className="btn-primary" style={{ padding: '6px 14px', fontSize: '0.8rem' }} onClick={() => { setPaymentForm(f => ({ ...f, amount: balance > 0 ? balance : 0 })); setShowPaymentModal(true) }}>
+                    <button type="button" className="btn-primary invoice-btn invoice-btn--add-payment-inline" style={{ padding: '6px 14px', fontSize: '0.8rem' }} onClick={() => { setPaymentForm(f => ({ ...f, amount: balance > 0 ? balance : 0 })); setShowPaymentModal(true) }}>
                       + Enregistrer paiement
                     </button>
                   )}
                 </div>
                 {payments.length > 0 ? (
-                  <table className="hub-table">
+                  <table className="hub-table invoice-payments-table">
                     <thead><tr><th>Date</th><th>Méthode</th><th>Référence</th><th>Montant</th></tr></thead>
                     <tbody>
                       {payments.map((p: any) => (
@@ -456,10 +456,10 @@ export default function InvoiceDetailPage() {
                     </tbody>
                   </table>
                 ) : (
-                  <div style={{ padding: '20px', textAlign: 'center', color: '#999', fontSize: '0.875rem' }}>Aucun paiement enregistré</div>
+                  <div className="invoice-payments-empty" style={{ padding: '20px', textAlign: 'center', color: '#999', fontSize: '0.875rem' }}>Aucun paiement enregistré</div>
                 )}
                 {balance > 0 && payments.length > 0 && (
-                  <div style={{ padding: '12px 20px', background: '#fffbeb', borderTop: '1px solid #fde68a', display: 'flex', justifyContent: 'space-between' }}>
+                  <div className="invoice-payments-balance" style={{ padding: '12px 20px', background: '#fffbeb', borderTop: '1px solid #fde68a', display: 'flex', justifyContent: 'space-between' }}>
                     <span style={{ color: '#92400e', fontWeight: 600 }}>⏳ Solde restant dû</span>
                     <span style={{ fontWeight: 800, color: '#92400e' }}>{balance.toLocaleString('fr-FR', { maximumFractionDigits: 0 })} FCFA</span>
                   </div>
@@ -468,38 +468,38 @@ export default function InvoiceDetailPage() {
             )}
 
             {invoice.notes && (
-              <div style={{ background: 'white', borderRadius: 12, border: '1px solid #e8e4db', padding: '16px 20px' }}>
-                <div style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#888', marginBottom: 6 }}>Notes</div>
+              <div className="invoice-section invoice-section--notes-detail" style={{ background: 'white', borderRadius: 12, border: '1px solid #e8e4db', padding: '16px 20px' }}>
+                <div className="invoice-section__title" style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#888', marginBottom: 6 }}>Notes</div>
                 <div style={{ color: '#555', fontSize: '0.875rem' }}>{invoice.notes}</div>
               </div>
             )}
           </div>
 
           {/* Colonne droite */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16, position: 'sticky', top: 80 }}>
+          <div className="invoice-page__aside" style={{ display: 'flex', flexDirection: 'column', gap: 16, position: 'sticky', top: 80 }}>
 
             {/* Actions */}
-            <div style={{ background: 'white', borderRadius: 12, border: '1px solid #e8e4db', padding: '20px' }}>
-              <div style={{ fontWeight: 700, color: 'var(--hub-green)', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 12 }}>Actions</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                <button className="btn-primary" style={{ justifyContent: 'center', padding: '11px' }} onClick={generatePDF}>🖨️ Imprimer / Télécharger PDF</button>
+            <div className="invoice-section invoice-section--actions-detail" style={{ background: 'white', borderRadius: 12, border: '1px solid #e8e4db', padding: '20px' }}>
+              <div className="invoice-section__title" style={{ fontWeight: 700, color: 'var(--hub-green)', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 12 }}>Actions</div>
+              <div className="invoice-detail-actions" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <button type="button" className="btn-primary invoice-btn invoice-btn--print-pdf-aside" style={{ justifyContent: 'center', padding: '11px' }} onClick={generatePDF}>🖨️ Imprimer / Télécharger PDF</button>
                 {invoice.status === 'draft' && (
-                  <button className="btn-amber" style={{ justifyContent: 'center', padding: '11px' }} onClick={() => updateStatus('pending')} disabled={updating}>
+                  <button type="button" className="btn-amber invoice-btn invoice-btn--submit-detail" style={{ justifyContent: 'center', padding: '11px' }} onClick={() => updateStatus('pending')} disabled={updating}>
                     📤 Soumettre pour validation
                   </button>
                 )}
                 {invoice.status === 'pending' && (
                   <>
-                    <button className="btn-primary" style={{ justifyContent: 'center', padding: '11px', background: '#065f46' }} onClick={() => updateStatus('paid')} disabled={updating}>
+                    <button type="button" className="btn-primary invoice-btn invoice-btn--mark-paid" style={{ justifyContent: 'center', padding: '11px', background: '#065f46' }} onClick={() => updateStatus('paid')} disabled={updating}>
                       ✅ Marquer comme Payée
                     </button>
-                    <button className="btn-ghost" style={{ justifyContent: 'center', padding: '11px' }} onClick={() => { setPaymentForm(f => ({ ...f, amount: balance })); setShowPaymentModal(true) }}>
+                    <button type="button" className="btn-ghost invoice-btn invoice-btn--add-payment-aside" style={{ justifyContent: 'center', padding: '11px' }} onClick={() => { setPaymentForm(f => ({ ...f, amount: balance })); setShowPaymentModal(true) }}>
                       💳 Enregistrer un paiement
                     </button>
                   </>
                 )}
                 {invoice.status !== 'cancelled' && invoice.status !== 'paid' && (
-                  <button className="btn-danger" style={{ padding: '10px', justifyContent: 'center' }} onClick={() => { if (confirm('Annuler cette facture ?')) updateStatus('cancelled') }}>
+                  <button type="button" className="btn-danger invoice-btn invoice-btn--cancel-invoice" style={{ padding: '10px', justifyContent: 'center' }} onClick={() => { if (confirm('Annuler cette facture ?')) updateStatus('cancelled') }}>
                     ❌ Annuler la facture
                   </button>
                 )}
@@ -507,8 +507,8 @@ export default function InvoiceDetailPage() {
             </div>
 
             {/* Résumé financier */}
-            <div style={{ background: 'white', borderRadius: 12, border: '1px solid #e8e4db', padding: '20px' }}>
-              <div style={{ fontWeight: 700, color: 'var(--hub-green)', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 12 }}>💰 Résumé</div>
+            <div className="invoice-section invoice-section--financial-summary" style={{ background: 'white', borderRadius: 12, border: '1px solid #e8e4db', padding: '20px' }}>
+              <div className="invoice-section__title" style={{ fontWeight: 700, color: 'var(--hub-green)', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 12 }}>💰 Résumé</div>
               {[
                 ['Total TTC', `${Number(invoice.total || 0).toLocaleString('fr-FR', { maximumFractionDigits: 0 })} FCFA`, true],
                 ['Total payé', `${totalPaid.toLocaleString('fr-FR', { maximumFractionDigits: 0 })} FCFA`, false],
@@ -523,8 +523,8 @@ export default function InvoiceDetailPage() {
 
             {/* Historique client */}
             {clientHistory && (
-              <div style={{ background: 'white', borderRadius: 12, border: '1px solid #e8e4db', padding: '20px' }}>
-                <div style={{ fontWeight: 700, color: 'var(--hub-green)', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 12 }}>
+              <div className="invoice-section invoice-section--client-profile" style={{ background: 'white', borderRadius: 12, border: '1px solid #e8e4db', padding: '20px' }}>
+                <div className="invoice-section__title" style={{ fontWeight: 700, color: 'var(--hub-green)', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 12 }}>
                   👤 Profil Client
                 </div>
                 <div style={{ fontWeight: 700, marginBottom: 10 }}>{clientHistory.client_name}</div>
@@ -543,8 +543,8 @@ export default function InvoiceDetailPage() {
             )}
 
             {/* Métadonnées */}
-            <div style={{ background: 'white', borderRadius: 12, border: '1px solid #e8e4db', padding: '16px 20px' }}>
-              <div style={{ fontSize: '0.7rem', color: '#999', lineHeight: 1.8 }}>
+            <div className="invoice-section invoice-section--meta-footer" style={{ background: 'white', borderRadius: 12, border: '1px solid #e8e4db', padding: '16px 20px' }}>
+              <div className="invoice-detail-meta-footer" style={{ fontSize: '0.7rem', color: '#999', lineHeight: 1.8 }}>
                 <div>Créé par: {invoice.creator?.full_name || '—'}</div>
                 <div>Créé le: {new Date(invoice.created_at).toLocaleString('fr-FR')}</div>
                 {invoice.validated_at && <div>Validé le: {new Date(invoice.validated_at).toLocaleString('fr-FR')}</div>}
@@ -556,37 +556,37 @@ export default function InvoiceDetailPage() {
 
       {/* Modal Paiement */}
       {showPaymentModal && (
-        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowPaymentModal(false)}>
-          <div className="modal-box">
-            <div className="modal-title">💳 Enregistrer un paiement</div>
-            <form onSubmit={addPayment}>
+        <div className="modal-overlay invoice-payment-modal-overlay" onClick={e => e.target === e.currentTarget && setShowPaymentModal(false)}>
+          <div className="modal-box invoice-payment-modal">
+            <div className="modal-title invoice-payment-modal__title">💳 Enregistrer un paiement</div>
+            <form className="invoice-payment-modal__form" onSubmit={addPayment}>
               <div className="hub-form-group">
                 <label>Montant (FCFA) *</label>
-                <input className="hub-input" type="number" min={1} required value={paymentForm.amount || ''}
+                <input className="hub-input invoice-field invoice-field--payment-amount" type="number" min={1} required value={paymentForm.amount || ''}
                   onChange={e => setPaymentForm({ ...paymentForm, amount: Number(e.target.value) })} />
-                {balance > 0 && <div style={{ fontSize: '0.75rem', color: '#666', marginTop: 4 }}>Solde dû: {balance.toLocaleString('fr-FR', { maximumFractionDigits: 0 })} FCFA</div>}
+                {balance > 0 && <div className="invoice-payment-modal__hint" style={{ fontSize: '0.75rem', color: '#666', marginTop: 4 }}>Solde dû: {balance.toLocaleString('fr-FR', { maximumFractionDigits: 0 })} FCFA</div>}
               </div>
               <div className="hub-form-group">
                 <label>Date du paiement</label>
-                <input className="hub-input" type="date" value={paymentForm.payment_date} onChange={e => setPaymentForm({ ...paymentForm, payment_date: e.target.value })} />
+                <input className="hub-input invoice-field invoice-field--payment-date" type="date" value={paymentForm.payment_date} onChange={e => setPaymentForm({ ...paymentForm, payment_date: e.target.value })} />
               </div>
               <div className="hub-form-group">
                 <label>Méthode de paiement</label>
-                <select className="hub-select" value={paymentForm.method} onChange={e => setPaymentForm({ ...paymentForm, method: e.target.value })}>
+                <select className="hub-select invoice-field invoice-field--payment-method" value={paymentForm.method} onChange={e => setPaymentForm({ ...paymentForm, method: e.target.value })}>
                   {['virement', 'espèces', 'chèque', 'mobile money', 'autre'].map(m => <option key={m}>{m}</option>)}
                 </select>
               </div>
               <div className="hub-form-group">
                 <label>Référence / N° de transaction</label>
-                <input className="hub-input" value={paymentForm.reference} onChange={e => setPaymentForm({ ...paymentForm, reference: e.target.value })} placeholder="TXN-2026-XXXX" />
+                <input className="hub-input invoice-field invoice-field--payment-reference" value={paymentForm.reference} onChange={e => setPaymentForm({ ...paymentForm, reference: e.target.value })} placeholder="TXN-2026-XXXX" />
               </div>
               <div className="hub-form-group">
                 <label>Notes</label>
-                <textarea className="hub-input" rows={2} value={paymentForm.notes} onChange={e => setPaymentForm({ ...paymentForm, notes: e.target.value })} style={{ resize: 'vertical' }} />
+                <textarea className="hub-input invoice-field invoice-field--payment-notes" rows={2} value={paymentForm.notes} onChange={e => setPaymentForm({ ...paymentForm, notes: e.target.value })} style={{ resize: 'vertical' }} />
               </div>
-              <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
-                <button type="button" className="btn-ghost" onClick={() => setShowPaymentModal(false)}>Annuler</button>
-                <button type="submit" className="btn-primary" disabled={saving}>{saving ? '...' : '✅ Enregistrer le paiement'}</button>
+              <div className="invoice-payment-modal__actions" style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
+                <button type="button" className="btn-ghost invoice-btn invoice-btn--payment-cancel" onClick={() => setShowPaymentModal(false)}>Annuler</button>
+                <button type="submit" className="btn-primary invoice-btn invoice-btn--payment-submit" disabled={saving}>{saving ? '...' : '✅ Enregistrer le paiement'}</button>
               </div>
             </form>
           </div>
