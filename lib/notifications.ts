@@ -58,7 +58,11 @@ export async function createNotification(params: {
   await supabase.from('notifications').insert(notifications)
 
   let emailed = 0
-  if (process.env.RESEND_API_KEY && process.env.RESEND_API_KEY !== 're_your-resend-api-key-here') {
+  const resendKey = process.env.RESEND_API_KEY
+  if (resendKey && resendKey !== 're_your-resend-api-key-here') {
+    const appBase =
+      (process.env.NEXT_PUBLIC_APP_URL || '').replace(/\/$/, '') ||
+      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')
     const { data: authUsers } = await supabase.auth.admin.listUsers()
     const emailMap = new Map<string, string>()
     if (authUsers?.users) {
@@ -72,7 +76,7 @@ export async function createNotification(params: {
       if (!email) continue
       try {
         await resend.emails.send({
-          from: 'HUB Distribution <contact@hub-distribution.com>',
+          from: 'HUB-Distribution <contact@hub-distribution.com>',
           to: email,
           subject: `${typeIcons[params.type]} ${params.title}`,
           html: `
@@ -85,7 +89,7 @@ export async function createNotification(params: {
                 <div style="font-size:1.5rem;margin-bottom:8px">${typeIcons[params.type]}</div>
                 <div style="font-weight:700;color:#1a3d2b;font-size:1.05rem;margin-bottom:8px">${params.title}</div>
                 <div style="color:#555;font-size:0.9rem;margin-bottom:16px">${params.message}</div>
-                <a href="${process.env.NEXT_PUBLIC_SUPABASE_URL ? process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000' : 'http://localhost:3000'}${params.link}"
+                <a href="${appBase}${params.link}"
                    style="display:inline-block;background:#1a3d2b;color:white;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:600;font-size:0.875rem">
                   Voir le document
                 </a>
