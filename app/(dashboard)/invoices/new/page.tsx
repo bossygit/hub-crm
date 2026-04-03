@@ -50,6 +50,7 @@ export default function NewInvoicePage() {
   const [draftId, setDraftId] = useState<string | null>(null)
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const isSaving = useRef(false)
+  const autoSaveAbort = useRef(false)
   const supabase = createClient()
 
   // Calculs live
@@ -117,6 +118,7 @@ export default function NewInvoicePage() {
   async function autoSave() {
     if (isSaving.current) return
     if (!form.invoice_number) return
+    autoSaveAbort.current = false
     setAutoSaveStatus('saving')
     const { data: userData } = await supabase.auth.getUser()
     const payload = {
@@ -136,6 +138,7 @@ export default function NewInvoicePage() {
       await supabase.from('invoice_items').delete().eq('invoice_id', draftId)
       const validItems = items.filter(it => it.name && it.quantity > 0)
       if (validItems.length > 0) {
+        if (autoSaveAbort.current) return
         await supabase.from('invoice_items').insert(
           validItems.map((it, idx) => ({ ...it, invoice_id: draftId, sort_order: idx }))
         )
@@ -146,6 +149,7 @@ export default function NewInvoicePage() {
         setDraftId(newDraft.id)
         const validItems = items.filter(it => it.name && it.quantity > 0)
         if (validItems.length > 0) {
+          if (autoSaveAbort.current) return
           await supabase.from('invoice_items').insert(
             validItems.map((it, idx) => ({ ...it, invoice_id: newDraft.id, sort_order: idx }))
           )
@@ -181,10 +185,12 @@ export default function NewInvoicePage() {
   function removeLine(idx: number) { if (items.length > 1) setItems(items.filter((_, i) => i !== idx)) }
 
   async function handleSave(targetStatus: 'draft' | 'pending' | 'paid') {
+    if (isSaving.current) return
     if (!form.invoice_number) return
     const validItems = items.filter(it => it.name && it.quantity > 0 && it.unit_price >= 0)
     if (validItems.length === 0) { alert('Ajoutez au moins une ligne valide'); return }
 
+    autoSaveAbort.current = true
     if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current)
     isSaving.current = true
     setSaving(true)
