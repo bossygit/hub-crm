@@ -276,75 +276,75 @@ export default function NewInvoicePage() {
   )
 
   return (
-    <div>
-      <div className="page-header">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <button onClick={() => router.back()}
+    <div className="invoice-page invoice-page--new">
+      <div className="page-header invoice-page__toolbar invoice-form__header-toolbar">
+        <div className="invoice-form__header-title" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <button type="button" className="invoice-btn invoice-btn--back" onClick={() => router.back()}
             style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.2rem', color: 'var(--hub-green)' }}>←</button>
           <h2>🧾 Nouvelle Facture</h2>
           {duplicateId && <span className="badge badge-blue">📋 Duplication</span>}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          {autoSaveStatus === 'saving' && <span style={{ fontSize: '0.78rem', color: '#999' }}>💾 Sauvegarde...</span>}
-          {autoSaveStatus === 'saved'  && <span style={{ fontSize: '0.78rem', color: '#065f46' }}>✓ Sauvegardé</span>}
-          <button className="btn-ghost"   onClick={() => handleSave('draft')}   disabled={saving}>💾 Brouillon</button>
-          <button className="btn-amber"   onClick={() => handleSave('pending')} disabled={saving}>📤 Soumettre</button>
-          <button className="btn-primary" onClick={() => handleSave('paid')}    disabled={saving}>✅ Valider & Payer</button>
+        <div className="invoice-form__header-actions" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          {autoSaveStatus === 'saving' && <span className="invoice-form__autosave invoice-form__autosave--saving" style={{ fontSize: '0.78rem', color: '#999' }}>💾 Sauvegarde...</span>}
+          {autoSaveStatus === 'saved'  && <span className="invoice-form__autosave invoice-form__autosave--saved" style={{ fontSize: '0.78rem', color: '#065f46' }}>✓ Sauvegardé</span>}
+          <button type="button" className="btn-ghost invoice-btn invoice-btn--save-draft" onClick={() => handleSave('draft')}   disabled={saving}>💾 Brouillon</button>
+          <button type="button" className="btn-amber invoice-btn invoice-btn--save-pending" onClick={() => handleSave('pending')} disabled={saving}>📤 Soumettre</button>
+          <button type="button" className="btn-primary invoice-btn invoice-btn--save-paid" onClick={() => handleSave('paid')}    disabled={saving}>✅ Valider & Payer</button>
         </div>
       </div>
 
-      <div style={{ padding: '24px 32px', maxWidth: 1000, margin: '0 auto' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 380px', gap: 24, alignItems: 'start' }}>
+      <div className="invoice-page__body" style={{ padding: '24px 32px', maxWidth: 1000, margin: '0 auto' }}>
+        <div className="invoice-page__layout invoice-form__layout" style={{ display: 'grid', gridTemplateColumns: '1fr 380px', gap: 24, alignItems: 'start' }}>
 
           {/* ── Colonne principale ── */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+          <div className="invoice-page__main" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
 
             {/* Infos facture */}
-            <div style={{ background: 'white', borderRadius: 12, border: '1px solid #e8e4db', padding: '24px' }}>
-              <div style={{ fontWeight: 700, color: 'var(--hub-green)', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 16, paddingBottom: 8, borderBottom: '2px solid var(--hub-amber)' }}>
+            <div className="invoice-form__section invoice-form__section--invoice-meta" style={{ background: 'white', borderRadius: 12, border: '1px solid #e8e4db', padding: '24px' }}>
+              <div className="invoice-form__section-title" style={{ fontWeight: 700, color: 'var(--hub-green)', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 16, paddingBottom: 8, borderBottom: '2px solid var(--hub-amber)' }}>
                 📋 Informations Facture
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+              <div className="invoice-form__grid invoice-form__grid--cols-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
                 <div className="hub-form-group">
-                  <label>N° Facture</label>
-                  <input className="hub-input" value={form.invoice_number} readOnly
+                  <label className="invoice-field__label">N° Facture</label>
+                  <input className="hub-input invoice-field invoice-field--invoice-number" value={form.invoice_number} readOnly
                     style={{ background: '#f8f5ee', fontFamily: 'monospace', fontWeight: 700, color: 'var(--hub-green)' }} />
                 </div>
                 <div className="hub-form-group">
-                  <label>Statut</label>
-                  <div style={{ padding: '10px 14px', background: '#f8f5ee', borderRadius: 8, fontSize: '0.875rem', fontWeight: 600, color: 'var(--hub-green-mid)' }}>
+                  <label className="invoice-field__label">Statut</label>
+                  <div className="invoice-form__status-placeholder" style={{ padding: '10px 14px', background: '#f8f5ee', borderRadius: 8, fontSize: '0.875rem', fontWeight: 600, color: 'var(--hub-green-mid)' }}>
                     ✏️ Brouillon — sera défini à la sauvegarde
                   </div>
                 </div>
                 <div className="hub-form-group">
-                  <label>Date de facturation</label>
-                  <input className="hub-input" type="date" value={form.date}
+                  <label className="invoice-field__label">Date de facturation</label>
+                  <input className="hub-input invoice-field invoice-field--date" type="date" value={form.date}
                     onChange={e => setForm(f => ({ ...f, date: e.target.value }))} />
                 </div>
                 <div className="hub-form-group">
-                  <label>Date d&apos;échéance</label>
-                  <input className="hub-input" type="date" value={form.due_date}
+                  <label className="invoice-field__label">Date d&apos;échéance</label>
+                  <input className="hub-input invoice-field invoice-field--due-date" type="date" value={form.due_date}
                     onChange={e => setForm(f => ({ ...f, due_date: e.target.value }))} />
                 </div>
               </div>
             </div>
 
             {/* Client */}
-            <div style={{ background: 'white', borderRadius: 12, border: '1px solid #e8e4db', padding: '24px' }}>
-              <div style={{ fontWeight: 700, color: 'var(--hub-green)', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 16, paddingBottom: 8, borderBottom: '2px solid var(--hub-amber)' }}>
+            <div className="invoice-form__section invoice-form__section--client" style={{ background: 'white', borderRadius: 12, border: '1px solid #e8e4db', padding: '24px' }}>
+              <div className="invoice-form__section-title" style={{ fontWeight: 700, color: 'var(--hub-green)', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 16, paddingBottom: 8, borderBottom: '2px solid var(--hub-amber)' }}>
                 👥 Client
               </div>
-              <div style={{ position: 'relative' }}>
-                <input className="hub-input" placeholder="🔍 Rechercher un client..."
+              <div className="invoice-form__client-search" style={{ position: 'relative' }}>
+                <input className="hub-input invoice-field invoice-field--client-search" placeholder="🔍 Rechercher un client..."
                   value={clientSearch}
                   onChange={e => { setClientSearch(e.target.value); setShowClientDropdown(true) }}
                   onFocus={() => setShowClientDropdown(true)}
                   onBlur={() => setTimeout(() => setShowClientDropdown(false), 200)}
                 />
                 {showClientDropdown && filteredClients.length > 0 && (
-                  <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: 'white', border: '1.5px solid var(--hub-green-mid)', borderRadius: '0 0 10px 10px', zIndex: 50, maxHeight: 220, overflowY: 'auto', boxShadow: '0 8px 24px rgba(0,0,0,0.12)' }}>
+                  <div className="invoice-form__client-dropdown" style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: 'white', border: '1.5px solid var(--hub-green-mid)', borderRadius: '0 0 10px 10px', zIndex: 50, maxHeight: 220, overflowY: 'auto', boxShadow: '0 8px 24px rgba(0,0,0,0.12)' }}>
                     {filteredClients.map(c => (
-                      <div key={c.id} onMouseDown={() => selectClient(c)}
+                      <div key={c.id} className="invoice-form__client-option" onMouseDown={() => selectClient(c)}
                         style={{ padding: '10px 16px', cursor: 'pointer', borderBottom: '1px solid #f0ece4' }}
                         onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.background = '#f0f9f5' }}
                         onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = 'white' }}>
@@ -356,34 +356,34 @@ export default function NewInvoicePage() {
                 )}
               </div>
               {form.client_id && (
-                <div style={{ marginTop: 10, padding: '10px 14px', background: '#ecfdf5', borderRadius: 8, border: '1px solid #a7f3d0', fontSize: '0.875rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div className="invoice-form__client-chip" style={{ marginTop: 10, padding: '10px 14px', background: '#ecfdf5', borderRadius: 8, border: '1px solid #a7f3d0', fontSize: '0.875rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span>✅ <strong>{form.client_name}</strong> sélectionné</span>
-                  <button onClick={() => { setForm(f => ({ ...f, client_id: '', client_name: '' })); setClientSearch('') }}
+                  <button type="button" className="invoice-btn invoice-btn--clear-client" onClick={() => { setForm(f => ({ ...f, client_id: '', client_name: '' })); setClientSearch('') }}
                     style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#999', fontSize: '0.9rem' }}>✕</button>
                 </div>
               )}
             </div>
 
             {/* Lignes */}
-            <div style={{ background: 'white', borderRadius: 12, border: '1px solid #e8e4db', padding: '24px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, paddingBottom: 8, borderBottom: '2px solid var(--hub-amber)' }}>
-                <div style={{ fontWeight: 700, color: 'var(--hub-green)', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+            <div className="invoice-form__section invoice-form__section--line-items" style={{ background: 'white', borderRadius: 12, border: '1px solid #e8e4db', padding: '24px' }}>
+              <div className="invoice-line-items__toolbar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, paddingBottom: 8, borderBottom: '2px solid var(--hub-amber)' }}>
+                <div className="invoice-form__section-title" style={{ fontWeight: 700, color: 'var(--hub-green)', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 0, paddingBottom: 0, borderBottom: 'none' }}>
                   📦 Lignes de Facture
                 </div>
-                <button className="btn-ghost" style={{ padding: '6px 14px', fontSize: '0.8rem' }} onClick={addLine}>+ Ajouter ligne</button>
+                <button type="button" className="btn-ghost invoice-btn invoice-btn--add-line" style={{ padding: '6px 14px', fontSize: '0.8rem' }} onClick={addLine}>+ Ajouter ligne</button>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '2.5fr 1.5fr 1fr 1fr 1fr auto', gap: 8, marginBottom: 8, padding: '0 4px' }}>
+              <div className="invoice-line-items__header-row" style={{ display: 'grid', gridTemplateColumns: '2.5fr 1.5fr 1fr 1fr 1fr auto', gap: 8, marginBottom: 8, padding: '0 4px' }}>
                 {['Produit / Service', 'Désignation', 'Qté', 'Prix unit.', 'Total', ''].map(h => (
-                  <div key={h} style={{ fontSize: '0.7rem', fontWeight: 700, color: '#999', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{h}</div>
+                  <div key={h} className="invoice-line-items__header-cell" style={{ fontSize: '0.7rem', fontWeight: 700, color: '#999', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{h}</div>
                 ))}
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div className="invoice-line-items__list" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 {items.map((item, idx) => (
-                  <div key={idx} style={{ display: 'grid', gridTemplateColumns: '2.5fr 1.5fr 1fr 1fr 1fr auto', gap: 8, alignItems: 'flex-start', background: '#fafaf7', borderRadius: 8, padding: '10px' }}>
-                    <div>
-                      <select className="hub-select" style={{ fontSize: '0.82rem' }}
+                  <div key={idx} className="invoice-line-item" style={{ display: 'grid', gridTemplateColumns: '2.5fr 1.5fr 1fr 1fr 1fr auto', gap: 8, alignItems: 'flex-start', background: '#fafaf7', borderRadius: 8, padding: '10px' }}>
+                    <div className="invoice-line-item__product">
+                      <select className="hub-select invoice-field invoice-field--product" style={{ fontSize: '0.82rem' }}
                         value={item.product_id || ''}
                         onChange={e => updateItem(idx, 'product_id', e.target.value || null)}>
                         <option value="">— Produit catalogue —</option>
@@ -393,36 +393,36 @@ export default function NewInvoicePage() {
                           </option>
                         ))}
                       </select>
-                      <input className="hub-input" style={{ marginTop: 4, fontSize: '0.82rem' }}
+                      <input className="hub-input invoice-field invoice-field--line-name" style={{ marginTop: 4, fontSize: '0.82rem' }}
                         placeholder="Nom du produit / service..."
                         value={item.name}
                         onChange={e => updateItem(idx, 'name', e.target.value)} />
                     </div>
-                    <input className="hub-input" style={{ fontSize: '0.82rem' }}
+                    <input className="hub-input invoice-field invoice-field--line-description" style={{ fontSize: '0.82rem' }}
                       placeholder="Description..."
                       value={item.description}
                       onChange={e => updateItem(idx, 'description', e.target.value)} />
-                    <div>
-                      <input className="hub-input" type="number" min={0} step="0.01" style={{ fontSize: '0.82rem' }}
+                    <div className="invoice-line-item__qty">
+                      <input className="hub-input invoice-field invoice-field--quantity" type="number" min={0} step="0.01" style={{ fontSize: '0.82rem' }}
                         value={item.quantity}
                         onChange={e => updateItem(idx, 'quantity', parseFloat(e.target.value) || 0)} />
-                      <select className="hub-select" style={{ marginTop: 4, fontSize: '0.78rem' }}
+                      <select className="hub-select invoice-field invoice-field--unit" style={{ marginTop: 4, fontSize: '0.78rem' }}
                         value={item.unit}
                         onChange={e => updateItem(idx, 'unit', e.target.value)}>
                         {UNITS.map(u => <option key={u}>{u}</option>)}
                       </select>
                     </div>
-                    <div>
-                      <input className="hub-input" type="number" min={0} style={{ fontSize: '0.82rem' }}
+                    <div className="invoice-line-item__price">
+                      <input className="hub-input invoice-field invoice-field--unit-price" type="number" min={0} style={{ fontSize: '0.82rem' }}
                         value={item.unit_price}
                         onChange={e => updateItem(idx, 'unit_price', parseFloat(e.target.value) || 0)} />
                       <div style={{ fontSize: '0.7rem', color: '#999', marginTop: 2, textAlign: 'right' }}>FCFA</div>
                     </div>
-                    <div style={{ textAlign: 'right', fontWeight: 700, color: 'var(--hub-green)', paddingTop: 8, fontSize: '0.9rem' }}>
+                    <div className="invoice-line-item__total" style={{ textAlign: 'right', fontWeight: 700, color: 'var(--hub-green)', paddingTop: 8, fontSize: '0.9rem' }}>
                       {(item.quantity * item.unit_price).toLocaleString('fr-FR', { maximumFractionDigits: 0 })}
                       <div style={{ fontSize: '0.7rem', color: '#999', fontWeight: 400 }}>FCFA</div>
                     </div>
-                    <button onClick={() => removeLine(idx)} disabled={items.length === 1}
+                    <button type="button" className="invoice-btn invoice-btn--remove-line" onClick={() => removeLine(idx)} disabled={items.length === 1}
                       style={{ background: items.length === 1 ? '#f0ece4' : '#fee2e2', border: 'none', color: items.length === 1 ? '#ccc' : '#dc2626', borderRadius: 6, padding: '6px 10px', cursor: items.length === 1 ? 'not-allowed' : 'pointer', fontSize: '0.85rem', marginTop: 4 }}>
                       ✕
                     </button>
@@ -430,27 +430,27 @@ export default function NewInvoicePage() {
                 ))}
               </div>
 
-              <button className="btn-ghost" style={{ width: '100%', marginTop: 12, padding: '10px', justifyContent: 'center', fontSize: '0.875rem' }} onClick={addLine}>
+              <button type="button" className="btn-ghost invoice-btn invoice-btn--add-line-full" style={{ width: '100%', marginTop: 12, padding: '10px', justifyContent: 'center', fontSize: '0.875rem' }} onClick={addLine}>
                 + Ajouter une ligne
               </button>
             </div>
 
             {/* Notes */}
-            <div style={{ background: 'white', borderRadius: 12, border: '1px solid #e8e4db', padding: '24px' }}>
-              <div style={{ fontWeight: 700, color: 'var(--hub-green)', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 12 }}>
+            <div className="invoice-form__section invoice-form__section--notes" style={{ background: 'white', borderRadius: 12, border: '1px solid #e8e4db', padding: '24px' }}>
+              <div className="invoice-form__section-title" style={{ fontWeight: 700, color: 'var(--hub-green)', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 12, paddingBottom: 0, borderBottom: 'none' }}>
                 💬 Notes & Conditions
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+              <div className="invoice-form__grid invoice-form__grid--cols-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
                 <div className="hub-form-group">
-                  <label>Conditions de paiement</label>
-                  <select className="hub-select" value={form.payment_terms}
+                  <label className="invoice-field__label">Conditions de paiement</label>
+                  <select className="hub-select invoice-field invoice-field--payment-terms" value={form.payment_terms}
                     onChange={e => setForm(f => ({ ...f, payment_terms: e.target.value }))}>
                     {['Immédiat', '7 jours', '15 jours', '30 jours', '45 jours', '60 jours'].map(t => <option key={t}>{t}</option>)}
                   </select>
                 </div>
                 <div className="hub-form-group">
-                  <label>Notes internes</label>
-                  <textarea className="hub-input" rows={2} value={form.notes}
+                  <label className="invoice-field__label">Notes internes</label>
+                  <textarea className="hub-input invoice-field invoice-field--notes" rows={2} value={form.notes}
                     onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
                     placeholder="Informations complémentaires..."
                     style={{ resize: 'vertical' }} />
@@ -460,13 +460,13 @@ export default function NewInvoicePage() {
           </div>
 
           {/* ── Colonne droite : Résumé ── */}
-          <div style={{ position: 'sticky', top: 80 }}>
-            <div style={{ background: 'white', borderRadius: 12, border: '1px solid #e8e4db', overflow: 'hidden' }}>
-              <div style={{ background: 'var(--hub-green)', color: 'white', padding: '16px 20px' }}>
+          <div className="invoice-page__aside" style={{ position: 'sticky', top: 80 }}>
+            <div className="invoice-form__section invoice-form__section--summary" style={{ background: 'white', borderRadius: 12, border: '1px solid #e8e4db', overflow: 'hidden' }}>
+              <div className="invoice-form__summary-banner" style={{ background: 'var(--hub-green)', color: 'white', padding: '16px 20px' }}>
                 <div style={{ fontSize: '0.75rem', opacity: 0.7, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 2 }}>Résumé</div>
                 <div style={{ fontFamily: 'Georgia, serif', fontSize: '1rem', fontWeight: 700 }}>{form.invoice_number || '—'}</div>
               </div>
-              <div style={{ padding: '20px' }}>
+              <div className="invoice-form__summary-body" style={{ padding: '20px' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem', paddingBottom: 8, borderBottom: '1px solid #f0ece4' }}>
                     <span style={{ color: '#666' }}>Sous-total HT</span>
@@ -475,7 +475,7 @@ export default function NewInvoicePage() {
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.875rem', paddingBottom: 8, borderBottom: '1px solid #f0ece4' }}>
                     <span style={{ color: '#666' }}>Remise</span>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <input type="number" min={0} value={form.discount}
+                      <input className="invoice-field invoice-field--discount" type="number" min={0} value={form.discount}
                         onChange={e => setForm(f => ({ ...f, discount: parseFloat(e.target.value) || 0 }))}
                         style={{ width: 80, padding: '4px 8px', border: '1.5px solid #ddd', borderRadius: 6, fontSize: '0.82rem', textAlign: 'right' }} />
                       <span style={{ fontSize: '0.75rem', color: '#999' }}>FCFA</span>
@@ -484,13 +484,13 @@ export default function NewInvoicePage() {
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.875rem', paddingBottom: 8, borderBottom: '1px solid #f0ece4' }}>
                     <span style={{ color: '#666' }}>TVA</span>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                      <input type="number" min={0} max={100} value={form.tax_rate}
+                      <input className="invoice-field invoice-field--tax-rate" type="number" min={0} max={100} value={form.tax_rate}
                         onChange={e => setForm(f => ({ ...f, tax_rate: parseFloat(e.target.value) || 0 }))}
                         style={{ width: 50, padding: '4px 6px', border: '1.5px solid #ddd', borderRadius: 6, fontSize: '0.82rem', textAlign: 'center' }} />
                       <span style={{ color: '#666', fontSize: '0.82rem' }}>% = {taxAmount.toLocaleString('fr-FR', { maximumFractionDigits: 0 })} FCFA</span>
                     </div>
                   </div>
-                  <div style={{ background: 'var(--hub-green)', color: 'white', borderRadius: 8, padding: '14px 16px', marginTop: 4 }}>
+                  <div className="invoice-form__summary-total" style={{ background: 'var(--hub-green)', color: 'white', borderRadius: 8, padding: '14px 16px', marginTop: 4 }}>
                     <div style={{ fontSize: '0.7rem', opacity: 0.7, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 2 }}>Total TTC</div>
                     <div style={{ fontFamily: 'Georgia, serif', fontSize: '1.6rem', fontWeight: 800 }}>
                       {total.toLocaleString('fr-FR', { maximumFractionDigits: 0 })}
@@ -498,26 +498,26 @@ export default function NewInvoicePage() {
                     <div style={{ fontSize: '0.8rem', opacity: 0.8 }}>FCFA</div>
                   </div>
                 </div>
-                <div style={{ marginTop: 14, fontSize: '0.8rem', color: '#666', textAlign: 'center' }}>
+                <div className="invoice-form__summary-footer" style={{ marginTop: 14, fontSize: '0.8rem', color: '#666', textAlign: 'center' }}>
                   {items.filter(it => it.name).length} ligne(s) · {form.client_name || 'Pas de client'}
                 </div>
               </div>
             </div>
 
-            <div style={{ background: 'white', borderRadius: 12, border: '1px solid #e8e4db', padding: '20px', marginTop: 16 }}>
-              <div style={{ fontWeight: 700, color: 'var(--hub-green)', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 12 }}>Actions</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                <button className="btn-ghost" style={{ justifyContent: 'center', padding: '11px' }} onClick={() => handleSave('draft')} disabled={saving}>
+            <div className="invoice-form__section invoice-form__section--sidebar-actions" style={{ background: 'white', borderRadius: 12, border: '1px solid #e8e4db', padding: '20px', marginTop: 16 }}>
+              <div className="invoice-form__section-title" style={{ fontWeight: 700, color: 'var(--hub-green)', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 12, paddingBottom: 0, borderBottom: 'none' }}>Actions</div>
+              <div className="invoice-form__sidebar-actions" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <button type="button" className="btn-ghost invoice-btn invoice-btn--save-draft-aside" style={{ justifyContent: 'center', padding: '11px' }} onClick={() => handleSave('draft')} disabled={saving}>
                   {saving ? '⏳ Sauvegarde...' : '💾 Enregistrer en brouillon'}
                 </button>
-                <button className="btn-amber" style={{ justifyContent: 'center', padding: '11px' }} onClick={() => handleSave('pending')} disabled={saving}>
+                <button type="button" className="btn-amber invoice-btn invoice-btn--save-pending-aside" style={{ justifyContent: 'center', padding: '11px' }} onClick={() => handleSave('pending')} disabled={saving}>
                   {saving ? '⏳ Sauvegarde...' : '📤 Soumettre pour validation'}
                 </button>
-                <button className="btn-primary" style={{ justifyContent: 'center', padding: '11px' }} onClick={() => handleSave('paid')} disabled={saving}>
+                <button type="button" className="btn-primary invoice-btn invoice-btn--save-paid-aside" style={{ justifyContent: 'center', padding: '11px' }} onClick={() => handleSave('paid')} disabled={saving}>
                   {saving ? '⏳ Sauvegarde...' : '✅ Valider & Marquer Payée'}
                 </button>
               </div>
-              <div style={{ marginTop: 12, padding: '8px 10px', background: '#f8f5ee', borderRadius: 6, fontSize: '0.72rem', color: '#666' }}>
+              <div className="invoice-form__sidebar-hint" style={{ marginTop: 12, padding: '8px 10px', background: '#f8f5ee', borderRadius: 6, fontSize: '0.72rem', color: '#666' }}>
                 ⚠️ La validation décrémente le stock automatiquement et génère la facture définitive.
               </div>
             </div>

@@ -84,7 +84,7 @@ export default function InvoicesPage() {
 
       <div className="invoice-page__body" style={{ padding: '24px 32px' }}>
         {/* KPIs */}
-        <div className="invoice-list__kpis" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(170px,1fr))', gap: 14, marginBottom: 28 }}>
+        <div className="invoice-list__kpis invoice-list__kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(170px,1fr))', gap: 14, marginBottom: 28 }}>
           <div className="stat-card green">
             <div style={{ fontSize: '1.1rem', marginBottom: 4 }}>💵</div>
             <div className="stat-value" style={{ fontSize: '1.3rem' }}>{summary.revenue.toLocaleString('fr-FR', { maximumFractionDigits: 0 })}</div>
@@ -143,7 +143,7 @@ export default function InvoicesPage() {
         {/* Table */}
         <div className="invoice-list__table-wrap" style={{ background: 'white', borderRadius: 12, border: '1px solid #e8e4db', overflow: 'hidden' }}>
           {loading ? (
-            <div className="invoice-state invoice-state--loading" style={{ padding: 48, textAlign: 'center', color: '#999' }}>Chargement...</div>
+            <div className="invoice-state invoice-state--loading" style={{ padding: 48, textAlign: 'center', color: '#999' }}><span className="invoice-state__message">Chargement...</span></div>
           ) : (
             <table className="hub-table invoice-list__table">
               <thead>
@@ -154,7 +154,7 @@ export default function InvoicesPage() {
                   const cfg = statusConfig[inv.status as keyof typeof statusConfig]
                   const isOverdue = inv.status === 'pending' && inv.due_date && new Date(inv.due_date) < new Date()
                   return (
-                    <tr key={inv.id}>
+                    <tr key={inv.id} className="invoice-list__row">
                       <td>
                         <Link className="invoice-list__invoice-link" href={`/invoices/${inv.id}`} style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--hub-green-mid)', textDecoration: 'none', fontSize: '0.9rem' }}>
                           {inv.invoice_number}
@@ -169,7 +169,7 @@ export default function InvoicesPage() {
                         {inv.due_date ? new Date(inv.due_date).toLocaleDateString('fr-FR') : '—'}
                         {isOverdue && <span style={{ display: 'block', fontSize: '0.7rem' }}>⚠ En retard</span>}
                       </td>
-                      <td>
+                      <td className="invoice-list__cell invoice-list__cell--amount">
                         <div style={{ fontWeight: 700, fontSize: '0.95rem' }}>{Number(inv.total || 0).toLocaleString('fr-FR', { maximumFractionDigits: 0 })} FCFA</div>
                         {inv.discount > 0 && <div style={{ fontSize: '0.72rem', color: '#999' }}>Remise: {Number(inv.discount).toLocaleString()} FCFA</div>}
                       </td>
@@ -185,7 +185,7 @@ export default function InvoicesPage() {
                 })}
                 {filtered.length === 0 && (
                   <tr><td colSpan={7} className="invoice-state invoice-state--empty" style={{ textAlign: 'center', padding: 48, color: '#999' }}>
-                    {search ? `Aucun résultat pour "${search}"` : 'Aucune facture'}
+                    <span className="invoice-state__message">{search ? `Aucun résultat pour "${search}"` : 'Aucune facture'}</span>
                     {!search && <div style={{ marginTop: 12 }}><Link href="/invoices/new" className="btn-primary invoice-btn invoice-btn--new-first" style={{ textDecoration: 'none' }}>+ Créer la première facture</Link></div>}
                   </td></tr>
                 )}

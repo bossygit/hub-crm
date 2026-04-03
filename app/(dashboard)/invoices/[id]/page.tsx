@@ -164,57 +164,57 @@ export default function InvoiceDetailPage() {
   .status-draft { background: #f3f4f6; color: #374151; }
 </style>
 </head>
-<body>
+<body class="invoice-pdf">
 
 <!-- EN-TÊTE -->
-<div class="header">
-  <div class="logo-area">
+<div class="header invoice-pdf__header">
+  <div class="logo-area invoice-pdf__logo-area">
     <img src="${window.location.origin}${logoUrl}" alt="HUB Distribution Logo" onerror="this.style.display='none'" />
-    <div>
-      <div class="company-name">HUB Distribution</div>
-      <div class="company-sub">Transformation & Distribution Agricole</div>
-      <div style="font-size:0.72rem;opacity:0.6;margin-top:4px">Brazzaville, République du Congo · hub@distribution.cg</div>
+    <div class="invoice-pdf__company">
+      <div class="company-name invoice-pdf__company-name">HUB Distribution</div>
+      <div class="company-sub invoice-pdf__company-sub">Transformation & Distribution Agricole</div>
+      <div class="invoice-pdf__company-contact" style="font-size:0.72rem;opacity:0.6;margin-top:4px">Brazzaville, République du Congo · hub@distribution.cg</div>
     </div>
   </div>
-  <div class="invoice-badge">
+  <div class="invoice-badge invoice-pdf__invoice-badge">
     <div class="type">🧾 FACTURE</div>
     <div class="num">${invoice.invoice_number}</div>
     <div style="margin-top:6px"><span class="status-ribbon status-${invoice.status}">${statusCfg.icon} ${statusCfg.label}</span></div>
   </div>
 </div>
 
-<div class="body">
+<div class="body invoice-pdf__main">
   <!-- META INFOS -->
-  <div class="meta-grid">
-    <div class="meta-box">
-      <div class="meta-label">Date d'émission</div>
-      <div class="meta-value">${new Date(invoice.date).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })}</div>
+  <div class="meta-grid invoice-pdf__meta-grid">
+    <div class="meta-box invoice-pdf__meta-box">
+      <div class="meta-label invoice-pdf__meta-label">Date d'émission</div>
+      <div class="meta-value invoice-pdf__meta-value">${new Date(invoice.date).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })}</div>
     </div>
-    <div class="meta-box">
-      <div class="meta-label">Date d'échéance</div>
-      <div class="meta-value" style="color:${invoice.due_date && new Date(invoice.due_date) < new Date() && invoice.status !== 'paid' ? '#dc2626' : '#1a3d2b'}">
+    <div class="meta-box invoice-pdf__meta-box">
+      <div class="meta-label invoice-pdf__meta-label">Date d'échéance</div>
+      <div class="meta-value invoice-pdf__meta-value" style="color:${invoice.due_date && new Date(invoice.due_date) < new Date() && invoice.status !== 'paid' ? '#dc2626' : '#1a3d2b'}">
         ${invoice.due_date ? new Date(invoice.due_date).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' }) : '—'}
       </div>
     </div>
-    <div class="meta-box">
-      <div class="meta-label">Conditions paiement</div>
-      <div class="meta-value">${invoice.payment_terms || '30 jours'}</div>
+    <div class="meta-box invoice-pdf__meta-box">
+      <div class="meta-label invoice-pdf__meta-label">Conditions paiement</div>
+      <div class="meta-value invoice-pdf__meta-value">${invoice.payment_terms || '30 jours'}</div>
     </div>
   </div>
 
   <!-- CLIENT -->
   ${invoice.client ? `
-  <div class="client-section">
-    <div class="client-label">Facturé à</div>
-    <div class="client-name">${invoice.client.name}</div>
-    ${invoice.client.email ? `<div class="client-detail">📧 ${invoice.client.email}</div>` : ''}
-    ${invoice.client.phone ? `<div class="client-detail">📱 ${invoice.client.phone}</div>` : ''}
-    ${invoice.client.address ? `<div class="client-detail">📍 ${invoice.client.address}</div>` : ''}
-    ${invoice.client.tax_id ? `<div class="client-detail">NIF: ${invoice.client.tax_id}</div>` : ''}
+  <div class="client-section invoice-pdf__client">
+    <div class="client-label invoice-pdf__client-label">Facturé à</div>
+    <div class="client-name invoice-pdf__client-name">${invoice.client.name}</div>
+    ${invoice.client.email ? `<div class="client-detail invoice-pdf__client-detail">📧 ${invoice.client.email}</div>` : ''}
+    ${invoice.client.phone ? `<div class="client-detail invoice-pdf__client-detail">📱 ${invoice.client.phone}</div>` : ''}
+    ${invoice.client.address ? `<div class="client-detail invoice-pdf__client-detail">📍 ${invoice.client.address}</div>` : ''}
+    ${invoice.client.tax_id ? `<div class="client-detail invoice-pdf__client-detail">NIF: ${invoice.client.tax_id}</div>` : ''}
   </div>` : ''}
 
   <!-- ARTICLES -->
-  <table>
+  <table class="invoice-pdf__items-table">
     <thead>
       <tr>
         <th style="width:40%">Désignation</th>
@@ -226,35 +226,35 @@ export default function InvoiceDetailPage() {
     </thead>
     <tbody>
       ${items.map((it: any) => `
-      <tr>
-        <td><div class="item-name">${it.name}</div>${it.description ? `<div class="item-desc">${it.description}</div>` : ''}</td>
-        <td>${it.quantity}</td>
-        <td>${it.unit || '—'}</td>
-        <td>${Number(it.unit_price).toLocaleString('fr-FR', { maximumFractionDigits: 0 })} FCFA</td>
-        <td>${Number(it.subtotal || it.quantity * it.unit_price).toLocaleString('fr-FR', { maximumFractionDigits: 0 })} FCFA</td>
+      <tr class="invoice-pdf__item-row">
+        <td class="invoice-pdf__item-cell invoice-pdf__item-cell--designation"><div class="item-name invoice-pdf__item-name">${it.name}</div>${it.description ? `<div class="item-desc invoice-pdf__item-desc">${it.description}</div>` : ''}</td>
+        <td class="invoice-pdf__item-cell invoice-pdf__item-cell--qty">${it.quantity}</td>
+        <td class="invoice-pdf__item-cell invoice-pdf__item-cell--unit">${it.unit || '—'}</td>
+        <td class="invoice-pdf__item-cell invoice-pdf__item-cell--unit-price">${Number(it.unit_price).toLocaleString('fr-FR', { maximumFractionDigits: 0 })} FCFA</td>
+        <td class="invoice-pdf__item-cell invoice-pdf__item-cell--line-total">${Number(it.subtotal || it.quantity * it.unit_price).toLocaleString('fr-FR', { maximumFractionDigits: 0 })} FCFA</td>
       </tr>`).join('')}
     </tbody>
   </table>
 
   <!-- TOTAUX -->
-  <div class="totals-section">
-    <div class="totals-box">
-      <div class="total-row"><span style="color:#666">Sous-total HT</span><span>${Number(invoice.subtotal || 0).toLocaleString('fr-FR', { maximumFractionDigits: 0 })} FCFA</span></div>
-      ${Number(invoice.discount) > 0 ? `<div class="total-row"><span style="color:#666">Remise</span><span style="color:#dc2626">- ${Number(invoice.discount).toLocaleString('fr-FR', { maximumFractionDigits: 0 })} FCFA</span></div>` : ''}
-      <div class="total-row"><span style="color:#666">TVA (${invoice.tax_rate}%)</span><span>${Number(invoice.tax_amount || 0).toLocaleString('fr-FR', { maximumFractionDigits: 0 })} FCFA</span></div>
-      <div class="total-final">
-        <div><div class="label">Total TTC</div></div>
-        <div class="amount">${Number(invoice.total || 0).toLocaleString('fr-FR', { maximumFractionDigits: 0 })} FCFA</div>
+  <div class="totals-section invoice-pdf__totals">
+    <div class="totals-box invoice-pdf__totals-box">
+      <div class="total-row invoice-pdf__total-row"><span style="color:#666">Sous-total HT</span><span>${Number(invoice.subtotal || 0).toLocaleString('fr-FR', { maximumFractionDigits: 0 })} FCFA</span></div>
+      ${Number(invoice.discount) > 0 ? `<div class="total-row invoice-pdf__total-row"><span style="color:#666">Remise</span><span style="color:#dc2626">- ${Number(invoice.discount).toLocaleString('fr-FR', { maximumFractionDigits: 0 })} FCFA</span></div>` : ''}
+      <div class="total-row invoice-pdf__total-row"><span style="color:#666">TVA (${invoice.tax_rate}%)</span><span>${Number(invoice.tax_amount || 0).toLocaleString('fr-FR', { maximumFractionDigits: 0 })} FCFA</span></div>
+      <div class="total-final invoice-pdf__total-final">
+        <div><div class="label invoice-pdf__total-final-label">Total TTC</div></div>
+        <div class="amount invoice-pdf__total-final-amount">${Number(invoice.total || 0).toLocaleString('fr-FR', { maximumFractionDigits: 0 })} FCFA</div>
       </div>
     </div>
   </div>
 
   <!-- PAIEMENTS -->
   ${payments.length > 0 ? `
-  <div class="payments-section">
-    <div class="payments-title">✅ Paiements enregistrés</div>
+  <div class="payments-section invoice-pdf__payments">
+    <div class="payments-title invoice-pdf__payments-title">✅ Paiements enregistrés</div>
     ${payments.map((p: any) => `
-    <div class="payment-row">
+    <div class="payment-row invoice-pdf__payment-row">
       <span>${new Date(p.payment_date).toLocaleDateString('fr-FR')} — ${p.method} ${p.reference ? '· Réf: ' + p.reference : ''}</span>
       <span style="font-weight:700">${Number(p.amount).toLocaleString('fr-FR', { maximumFractionDigits: 0 })} FCFA</span>
     </div>`).join('')}
@@ -262,36 +262,36 @@ export default function InvoiceDetailPage() {
 
   <!-- SOLDE -->
   ${balance > 0 ? `
-  <div class="balance-due outstanding">
+  <div class="balance-due outstanding invoice-pdf__balance invoice-pdf__balance--outstanding">
     <span style="font-weight:600;color:#92400e">⏳ Solde restant dû</span>
     <span style="font-weight:800;font-size:1.1rem;color:#92400e">${balance.toLocaleString('fr-FR', { maximumFractionDigits: 0 })} FCFA</span>
   </div>` : `
-  <div class="balance-due settled">
+  <div class="balance-due settled invoice-pdf__balance invoice-pdf__balance--settled">
     <span style="font-weight:600;color:#065f46">✅ Facture soldée</span>
     <span style="font-weight:700;color:#065f46">Aucun solde dû</span>
   </div>`}
 
   ${invoice.notes ? `
-  <div class="notes-box">
-    <div class="notes-label">Notes</div>
-    <div>${invoice.notes}</div>
+  <div class="notes-box invoice-pdf__notes">
+    <div class="notes-label invoice-pdf__notes-label">Notes</div>
+    <div class="invoice-pdf__notes-body">${invoice.notes}</div>
   </div>` : ''}
 
   <!-- SIGNATURES -->
-  <div class="signature-section">
-    <div class="sig-box">
-      <div class="sig-label">Émetteur — HUB Distribution</div>
-      <div class="sig-area">Signature & Cachet</div>
+  <div class="signature-section invoice-pdf__signatures">
+    <div class="sig-box invoice-pdf__sig-box">
+      <div class="sig-label invoice-pdf__sig-label">Émetteur — HUB Distribution</div>
+      <div class="sig-area invoice-pdf__sig-area">Signature & Cachet</div>
     </div>
-    <div class="sig-box">
-      <div class="sig-label">Client — ${invoice.client?.name || 'Client'}</div>
-      <div class="sig-area">Lu et approuvé</div>
+    <div class="sig-box invoice-pdf__sig-box">
+      <div class="sig-label invoice-pdf__sig-label">Client — ${invoice.client?.name || 'Client'}</div>
+      <div class="sig-area invoice-pdf__sig-area">Lu et approuvé</div>
     </div>
   </div>
 </div>
 
 <!-- FOOTER -->
-<div class="footer">
+<div class="footer invoice-pdf__footer">
   <span>HUB Distribution — RCCM: BZV-XXXX-XX — NIF: XXXXXXXXXX — Brazzaville, République du Congo</span>
   <span>Généré le ${new Date().toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })}</span>
 </div>
@@ -307,8 +307,8 @@ export default function InvoiceDetailPage() {
     }
   }
 
-  if (loading) return <div className="invoice-state invoice-state--loading" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh', color: '#999' }}>Chargement...</div>
-  if (!invoice) return <div className="invoice-state invoice-state--empty" style={{ padding: 40, textAlign: 'center', color: '#999' }}>Facture introuvable</div>
+  if (loading) return <div className="invoice-state invoice-state--loading" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh', color: '#999' }}><span className="invoice-state__message">Chargement...</span></div>
+  if (!invoice) return <div className="invoice-state invoice-state--empty" style={{ padding: 40, textAlign: 'center', color: '#999' }}><span className="invoice-state__message">Facture introuvable</span></div>
 
   const statusCfg = statusConfig[invoice.status as keyof typeof statusConfig]
   const totalPaid = payments.reduce((s: number, p: any) => s + Number(p.amount), 0)
@@ -395,16 +395,16 @@ export default function InvoiceDetailPage() {
                 </thead>
                 <tbody>
                   {items.map((it: any) => (
-                    <tr key={it.id}>
-                      <td>
+                    <tr key={it.id} className="invoice-detail-items-table__row">
+                      <td className="invoice-detail-items-table__cell invoice-detail-items-table__cell--designation">
                         <div style={{ fontWeight: 600 }}>{it.name}</div>
                         {it.description && <div style={{ fontSize: '0.75rem', color: '#999' }}>{it.description}</div>}
                         {it.product?.name && it.product.name !== it.name && <div style={{ fontSize: '0.72rem', color: '#aaa' }}>Produit: {it.product.name}</div>}
                       </td>
-                      <td style={{ fontWeight: 700 }}>{it.quantity}</td>
-                      <td style={{ color: '#666' }}>{it.unit || '—'}</td>
-                      <td>{Number(it.unit_price).toLocaleString('fr-FR', { maximumFractionDigits: 0 })} FCFA</td>
-                      <td style={{ fontWeight: 700 }}>{Number(it.subtotal || it.quantity * it.unit_price).toLocaleString('fr-FR', { maximumFractionDigits: 0 })} FCFA</td>
+                      <td className="invoice-detail-items-table__cell invoice-detail-items-table__cell--qty" style={{ fontWeight: 700 }}>{it.quantity}</td>
+                      <td className="invoice-detail-items-table__cell invoice-detail-items-table__cell--unit" style={{ color: '#666' }}>{it.unit || '—'}</td>
+                      <td className="invoice-detail-items-table__cell invoice-detail-items-table__cell--unit-price">{Number(it.unit_price).toLocaleString('fr-FR', { maximumFractionDigits: 0 })} FCFA</td>
+                      <td className="invoice-detail-items-table__cell invoice-detail-items-table__cell--line-total" style={{ fontWeight: 700 }}>{Number(it.subtotal || it.quantity * it.unit_price).toLocaleString('fr-FR', { maximumFractionDigits: 0 })} FCFA</td>
                     </tr>
                   ))}
                 </tbody>
@@ -560,28 +560,28 @@ export default function InvoiceDetailPage() {
           <div className="modal-box invoice-payment-modal">
             <div className="modal-title invoice-payment-modal__title">💳 Enregistrer un paiement</div>
             <form className="invoice-payment-modal__form" onSubmit={addPayment}>
-              <div className="hub-form-group">
-                <label>Montant (FCFA) *</label>
+              <div className="hub-form-group invoice-payment-modal__field">
+                <label className="invoice-field__label">Montant (FCFA) *</label>
                 <input className="hub-input invoice-field invoice-field--payment-amount" type="number" min={1} required value={paymentForm.amount || ''}
                   onChange={e => setPaymentForm({ ...paymentForm, amount: Number(e.target.value) })} />
                 {balance > 0 && <div className="invoice-payment-modal__hint" style={{ fontSize: '0.75rem', color: '#666', marginTop: 4 }}>Solde dû: {balance.toLocaleString('fr-FR', { maximumFractionDigits: 0 })} FCFA</div>}
               </div>
-              <div className="hub-form-group">
-                <label>Date du paiement</label>
+              <div className="hub-form-group invoice-payment-modal__field">
+                <label className="invoice-field__label">Date du paiement</label>
                 <input className="hub-input invoice-field invoice-field--payment-date" type="date" value={paymentForm.payment_date} onChange={e => setPaymentForm({ ...paymentForm, payment_date: e.target.value })} />
               </div>
-              <div className="hub-form-group">
-                <label>Méthode de paiement</label>
+              <div className="hub-form-group invoice-payment-modal__field">
+                <label className="invoice-field__label">Méthode de paiement</label>
                 <select className="hub-select invoice-field invoice-field--payment-method" value={paymentForm.method} onChange={e => setPaymentForm({ ...paymentForm, method: e.target.value })}>
                   {['virement', 'espèces', 'chèque', 'mobile money', 'autre'].map(m => <option key={m}>{m}</option>)}
                 </select>
               </div>
-              <div className="hub-form-group">
-                <label>Référence / N° de transaction</label>
+              <div className="hub-form-group invoice-payment-modal__field">
+                <label className="invoice-field__label">Référence / N° de transaction</label>
                 <input className="hub-input invoice-field invoice-field--payment-reference" value={paymentForm.reference} onChange={e => setPaymentForm({ ...paymentForm, reference: e.target.value })} placeholder="TXN-2026-XXXX" />
               </div>
-              <div className="hub-form-group">
-                <label>Notes</label>
+              <div className="hub-form-group invoice-payment-modal__field">
+                <label className="invoice-field__label">Notes</label>
                 <textarea className="hub-input invoice-field invoice-field--payment-notes" rows={2} value={paymentForm.notes} onChange={e => setPaymentForm({ ...paymentForm, notes: e.target.value })} style={{ resize: 'vertical' }} />
               </div>
               <div className="invoice-payment-modal__actions" style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
