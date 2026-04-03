@@ -243,7 +243,7 @@ export default function NewInvoicePage() {
         </div>
       </div>
 
-      <div className="invoice-page__body" style={{ padding: '24px 32px', maxWidth: 1000, margin: '0 auto' }}>
+      <div className="invoice-page__body" style={{ padding: '24px 32px', maxWidth: 1280, margin: '0 auto' }}>
         <div className="invoice-page__layout" style={{ display: 'grid', gridTemplateColumns: '1fr 380px', gap: 24, alignItems: 'start' }}>
 
           {/* Colonne principale */}
@@ -326,7 +326,7 @@ export default function NewInvoicePage() {
               </div>
 
               {/* En-tête colonnes */}
-              <div className="invoice-line-items__head invoice-form-grid invoice-form-grid--lines" style={{ display: 'grid', gridTemplateColumns: '2.5fr 1.5fr 1fr 1fr 1fr auto', gap: 8, marginBottom: 8, padding: '0 4px' }}>
+              <div className="invoice-line-items__head invoice-form-grid invoice-form-grid--lines" style={{ display: 'grid', gridTemplateColumns: '3fr 2fr 1.15fr 1fr 1fr auto', gap: 8, marginBottom: 8, padding: '0 4px' }}>
                 {['Produit / Service', 'Désignation', 'Qté', 'Prix unit.', 'Total', ''].map(h => (
                   <div key={h} className="invoice-line-items__col-label" style={{ fontSize: '0.7rem', fontWeight: 700, color: '#999', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{h}</div>
                 ))}
@@ -334,7 +334,7 @@ export default function NewInvoicePage() {
 
               <div className="invoice-line-items" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 {items.map((item, idx) => (
-                  <div key={idx} className="invoice-line-item invoice-form-grid invoice-form-grid--lines" style={{ display: 'grid', gridTemplateColumns: '2.5fr 1.5fr 1fr 1fr 1fr auto', gap: 8, alignItems: 'flex-start', background: '#fafaf7', borderRadius: 8, padding: '10px' }}>
+                  <div key={idx} className="invoice-line-item invoice-form-grid invoice-form-grid--lines" style={{ display: 'grid', gridTemplateColumns: '3fr 2fr 1.15fr 1fr 1fr auto', gap: 8, alignItems: 'flex-start', background: '#fafaf7', borderRadius: 8, padding: '10px' }}>
                     {/* Sélecteur produit */}
                     <div className="invoice-line-item__product">
                       <select className="hub-select invoice-field invoice-field--product" style={{ fontSize: '0.82rem' }}
