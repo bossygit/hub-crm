@@ -8,6 +8,7 @@ const RESTRICTED_ROUTES: { prefix: string; allowedRoles: string[] }[] = [
   { prefix: '/hr', allowedRoles: ['ceo', 'manager', 'admin'] },
   { prefix: '/reports', allowedRoles: ['ceo', 'manager', 'admin'] },
   { prefix: '/recruitment', allowedRoles: ['ceo', 'manager', 'admin'] },
+  { prefix: '/admin', allowedRoles: ['ceo', 'admin'] },
 ]
 
 export async function middleware(request: NextRequest) {

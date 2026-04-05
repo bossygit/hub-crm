@@ -54,6 +54,13 @@ const nav: { section: string; items: NavItem[]; roles?: UserRole[] }[] = [
     ]
   },
   {
+    section: 'Administration',
+    roles: ['ceo', 'admin'],
+    items: [
+      { href: '/admin/users', icon: '🔑', label: 'Gestion des rôles', roles: ['ceo', 'admin'] },
+    ]
+  },
+  {
     section: 'Portail',
     items: [
       { href: '/portal', icon: '🌐', label: 'Portail Public', external: true },
