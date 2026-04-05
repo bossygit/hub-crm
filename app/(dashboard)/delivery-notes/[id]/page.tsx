@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
+import { useToast } from '@/components/ui/Toast'
 
 const statusConfig: Record<string, { label: string; badge: string; icon: string }> = {
   draft:    { label: 'Brouillon', badge: 'badge-gray',  icon: '✏️' },
@@ -20,6 +21,7 @@ export default function DeliveryNoteDetailPage() {
   const [loading, setLoading] = useState(true)
   const [updating, setUpdating] = useState(false)
   const supabase = createClient()
+  const { toast } = useToast()
 
   async function load() {
     setLoading(true)
@@ -37,7 +39,7 @@ export default function DeliveryNoteDetailPage() {
     const extra: Record<string, unknown> = { updated_at: new Date().toISOString() }
     if (status === 'approved') { extra.validated_by = userData.user?.id; extra.validated_at = new Date().toISOString() }
     const { error } = await supabase.from('documents').update({ status, ...extra }).eq('id', id)
-    if (error) alert('Erreur: ' + error.message)
+    if (error) toast('error', 'Erreur: ' + error.message)
     else {
       if (status === 'pending' && doc) {
         try {

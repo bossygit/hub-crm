@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
+import { useToast } from '@/components/ui/Toast'
 
 const statusConfig: Record<string, { label: string; badge: string; icon: string }> = {
   draft:     { label: 'Brouillon',  badge: 'badge-gray',  icon: '✏️' },
@@ -22,6 +23,7 @@ export default function QuoteDetailPage() {
   const [updating, setUpdating] = useState(false)
   const [converting, setConverting] = useState(false)
   const supabase = createClient()
+  const { toast } = useToast()
 
   async function load() {
     setLoading(true)
@@ -89,7 +91,7 @@ export default function QuoteDetailPage() {
       await supabase.from('documents').update({ status: 'converted', invoice_id: inv.id }).eq('id', id)
       router.push(`/invoices/${inv.id}`)
     } catch (err: unknown) {
-      alert('Erreur: ' + (err instanceof Error ? err.message : String(err)))
+      toast('error', 'Erreur: ' + (err instanceof Error ? err.message : String(err)))
     } finally { setConverting(false) }
   }
 

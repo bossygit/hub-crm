@@ -2,6 +2,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { Employee } from '@/types'
+import { useToast } from '@/components/ui/Toast'
 
 const contractLabels: Record<string, string> = { cdi: 'CDI', cdd: 'CDD', stage: 'Stage', freelance: 'Freelance' }
 
@@ -13,6 +14,7 @@ export default function CertificatesPage() {
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState({ employee_id: '', purpose: '' })
   const supabase = createClient()
+  const { toast } = useToast()
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -28,7 +30,7 @@ export default function CertificatesPage() {
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault()
-    if (!form.employee_id) { alert('Selectionnez un employe.'); return }
+    if (!form.employee_id) { toast('warning', 'Sélectionnez un employé.'); return }
     setSaving(true)
     const emp = employees.find(em => em.id === form.employee_id)
     await supabase.from('employee_documents').insert({

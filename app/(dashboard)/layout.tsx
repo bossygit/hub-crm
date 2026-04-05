@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import Sidebar from '@/components/layout/Sidebar'
 import NotificationBell from '@/components/NotificationBell'
+import ConnectivityBanner from '@/components/ConnectivityBanner'
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient()
@@ -10,6 +11,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   return (
     <div>
+      <ConnectivityBanner />
       <Sidebar />
       <div className="main-content">
         <div style={{

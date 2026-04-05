@@ -2,6 +2,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { Sale, Client, Product, ProductBatch, SaleItem } from '@/types'
+import { useToast } from '@/components/ui/Toast'
 
 const statusColors: Record<string, string> = {
   draft: 'badge-gray', pending: 'badge-amber', approved: 'badge-green',
@@ -91,6 +92,7 @@ export default function SalesPage() {
   const [saving, setSaving] = useState(false)
   const [filterStatus, setFilterStatus] = useState('all')
   const supabase = createClient()
+  const { toast } = useToast()
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -133,7 +135,7 @@ export default function SalesPage() {
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault()
-    if (items.length === 0) return alert('Ajoutez au moins un article')
+    if (items.length === 0) { toast('warning', 'Ajoutez au moins un article'); return }
     setSaving(true)
     const { data: user } = await supabase.auth.getUser()
     const { data: sale, error } = await supabase.from('sales').insert({ ...form, created_by: user.user?.id, status: 'draft' }).select().single()

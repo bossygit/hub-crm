@@ -1,11 +1,11 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   typescript: {
-    // Permet le déploiement même avec des erreurs TS (MVP)
+    // TODO: corriger les erreurs TS pré-existantes puis passer à false
     ignoreBuildErrors: true,
   },
   eslint: {
-    ignoreDuringBuilds: true,
+    ignoreDuringBuilds: false,
   },
 }
 module.exports = nextConfig

@@ -2,6 +2,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { Employee } from '@/types'
+import { useToast } from '@/components/ui/Toast'
 
 const statusConfig: Record<string, { label: string; badge: string; icon: string }> = {
   draft:    { label: 'Brouillon',  badge: 'badge-gray',  icon: '✏️' },
@@ -36,6 +37,7 @@ export default function LeavesPage() {
     employee_id: '', leave_type: 'annuel', start_date: '', end_date: '', reason: '',
   })
   const supabase = createClient()
+  const { toast } = useToast()
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -52,7 +54,7 @@ export default function LeavesPage() {
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault()
-    if (!form.employee_id || !form.start_date || !form.end_date) { alert('Remplissez tous les champs obligatoires.'); return }
+    if (!form.employee_id || !form.start_date || !form.end_date) { toast('warning', 'Remplissez tous les champs obligatoires.'); return }
     setSaving(true)
     const emp = employees.find(em => em.id === form.employee_id)
     const days = workingDays(form.start_date, form.end_date)

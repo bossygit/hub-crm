@@ -2,6 +2,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { Employee } from '@/types'
+import { useToast } from '@/components/ui/Toast'
 
 const months = ['Janvier', 'Fevrier', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Aout', 'Septembre', 'Octobre', 'Novembre', 'Decembre']
 
@@ -12,6 +13,7 @@ export default function PayslipsPage() {
   const [showModal, setShowModal] = useState(false)
   const [saving, setSaving] = useState(false)
   const [search, setSearch] = useState('')
+  const { toast } = useToast()
   const now = new Date()
   const [form, setForm] = useState({
     employee_id: '', month: now.getMonth(), year: now.getFullYear(),
@@ -49,7 +51,7 @@ export default function PayslipsPage() {
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault()
-    if (!form.employee_id) { alert('Selectionnez un employe.'); return }
+    if (!form.employee_id) { toast('warning', 'Sélectionnez un employé.'); return }
     setSaving(true)
     const emp = employees.find(em => em.id === form.employee_id)
     const calc = compute()

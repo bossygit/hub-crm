@@ -1,4 +1,4 @@
-export type UserRole = 'ceo' | 'manager' | 'admin' | 'employee' | 'client'
+export type UserRole = 'ceo' | 'manager' | 'admin' | 'employee' | 'partner'
 export type ClientType = 'client' | 'fournisseur' | 'institution'
 export type DocumentType = 'facture' | 'bon_de_livraison' | 'attestation' | 'contrat' | 'document_rh' | 'document_administratif' | 'autre' | 'devis' | 'bon_livraison' | 'bon_entree_stock' | 'bon_sortie_stock' | 'recu_paiement'
 export type DocumentStatus = 'draft' | 'pending' | 'approved' | 'rejected' | 'generated' | 'sent' | 'converted'

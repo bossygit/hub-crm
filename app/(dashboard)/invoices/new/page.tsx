@@ -3,6 +3,7 @@ import { useEffect, useState, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter, useSearchParams } from 'next/navigation'
 import type { Client, Product } from '@/types'
+import { useToast } from '@/components/ui/Toast'
 
 const UNITS = ['kg', 'g', 'L', 'ml', 'carton', 'sac', 'pièce', 'heure', 'forfait', 'unité']
 
@@ -54,6 +55,7 @@ export default function NewInvoicePage() {
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const supabase = createClient()
+  const { toast } = useToast()
 
   // Calculs live
   const subtotal = items.reduce((s, it) => s + it.quantity * it.unit_price, 0)
@@ -178,7 +180,7 @@ export default function NewInvoicePage() {
   async function handleSave(targetStatus: 'draft' | 'pending') {
     if (!form.invoice_number) return
     const validItems = items.filter(it => it.name.trim() && it.quantity > 0 && it.unit_price >= 0)
-    if (validItems.length === 0) { alert('Ajoutez au moins une ligne avec un nom et une quantité.'); return }
+    if (validItems.length === 0) { toast('warning', 'Ajoutez au moins une ligne avec un nom et une quantité.'); return }
 
     // Annuler l'auto-save en attente + poser le verrou
     if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current)
@@ -252,7 +254,7 @@ export default function NewInvoicePage() {
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : String(error)
       console.error('handleSave error:', msg)
-      alert('Erreur lors de la sauvegarde : ' + msg)
+      toast('error', 'Erreur lors de la sauvegarde : ' + msg)
     } finally {
       setSaving(false)
       isOperationInProgress.current = false

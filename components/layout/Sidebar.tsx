@@ -1,16 +1,26 @@
 'use client'
 import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { useUserRole } from '@/lib/hooks/useUserRole'
 import Link from 'next/link'
 import Image from 'next/image'
 import logoWhite from '../../app/assets/images/logo-white.png'
+import type { UserRole } from '@/types'
 
-const nav = [
+interface NavItem {
+  href: string
+  icon: string
+  label: string
+  external?: boolean
+  roles?: UserRole[]
+}
+
+const nav: { section: string; items: NavItem[]; roles?: UserRole[] }[] = [
   {
     section: 'Principal',
     items: [
       { href: '/dashboard', icon: '📊', label: 'Tableau de bord' },
-      { href: '/reports', icon: '📈', label: 'Rapports' },
+      { href: '/reports', icon: '📈', label: 'Rapports', roles: ['ceo', 'manager', 'admin'] },
     ]
   },
   {
@@ -33,6 +43,7 @@ const nav = [
   },
   {
     section: 'Ressources Humaines',
+    roles: ['ceo', 'manager', 'admin'],
     items: [
       { href: '/employees', icon: '👨‍💼', label: 'Employés & RH' },
       { href: '/hr/contracts', icon: '📝', label: 'Contrats' },
@@ -54,10 +65,18 @@ export default function Sidebar() {
   const pathname = usePathname()
   const router = useRouter()
   const supabase = createClient()
+  const { profile } = useUserRole()
+  const userRole = profile?.role
 
   async function handleLogout() {
     await supabase.auth.signOut()
     router.push('/login')
+  }
+
+  function isVisible(item: { roles?: UserRole[] }) {
+    if (!item.roles) return true
+    if (!userRole) return false
+    return item.roles.includes(userRole)
   }
 
   return (
@@ -73,10 +92,10 @@ export default function Sidebar() {
       </div>
 
       <nav style={{ flex: 1, overflowY: 'auto', padding: '8px 0' }}>
-        {nav.map(group => (
+        {nav.filter(group => isVisible(group)).map(group => (
           <div key={group.section}>
             <div className="nav-section">{group.section}</div>
-            {group.items.map(item => (
+            {group.items.filter(item => isVisible(item)).map(item => (
               <Link
                 key={item.href}
                 href={item.href}

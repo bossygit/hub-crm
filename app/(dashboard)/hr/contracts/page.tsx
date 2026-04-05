@@ -2,6 +2,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { Employee } from '@/types'
+import { useToast } from '@/components/ui/Toast'
 
 const contractLabels: Record<string, string> = { cdi: 'CDI', cdd: 'CDD', stage: 'Stage', freelance: 'Freelance' }
 
@@ -12,6 +13,7 @@ export default function ContractsPage() {
   const [showModal, setShowModal] = useState(false)
   const [saving, setSaving] = useState(false)
   const [search, setSearch] = useState('')
+  const { toast } = useToast()
   const [form, setForm] = useState({
     employee_id: '', contract_type: 'cdi', start_date: new Date().toISOString().split('T')[0],
     end_date: '', salary: 0, position: '', department: '', clauses: '',
@@ -38,7 +40,7 @@ export default function ContractsPage() {
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault()
-    if (!form.employee_id) { alert('Selectionnez un employe.'); return }
+    if (!form.employee_id) { toast('warning', 'Sélectionnez un employé.'); return }
     setSaving(true)
     const emp = employees.find(em => em.id === form.employee_id)
     await supabase.from('employee_documents').insert({

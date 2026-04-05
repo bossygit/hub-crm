@@ -3,6 +3,9 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
+import { useToast } from '@/components/ui/Toast'
+import { generateInvoicePDF, type InvoicePDFData } from '@/lib/pdf/generateInvoicePDF'
+import { savePDFAndUpdateRecord, getSignedPDFUrl } from '@/lib/storage/uploadPDF'
 
 const statusConfig: Record<string, { label: string; badge: string; icon: string; color: string }> = {
   draft:     { label: 'Brouillon',           badge: 'badge-gray',   icon: '✏️', color: '#666' },
@@ -29,6 +32,7 @@ export default function InvoiceDetailPage() {
   const [saving, setSaving] = useState(false)
   const [canValidate, setCanValidate] = useState(false)
   const supabase = createClient()
+  const { toast } = useToast()
 
   async function loadPermission() {
     const { data: userData } = await supabase.auth.getUser()
@@ -65,7 +69,7 @@ export default function InvoiceDetailPage() {
     const extra: Record<string, unknown> = { updated_at: new Date().toISOString() }
     if (status === 'approved') extra.validated_by = userData.user?.id
     const { error } = await supabase.from('invoices').update({ status, ...extra }).eq('id', id)
-    if (error) alert('Erreur: ' + error.message)
+    if (error) toast('error', 'Erreur: ' + error.message)
     else {
       if (status === 'pending' && invoice) {
         try {
@@ -383,6 +387,71 @@ ${payment.notes ? `<div style="padding:12px 16px;background:#f8f5ee;border-radiu
     }
   }
 
+  async function downloadAndStorePDF() {
+    if (!invoice) return
+    const pdfData: InvoicePDFData = {
+      invoice_number: invoice.invoice_number,
+      date: invoice.date,
+      due_date: invoice.due_date,
+      status: invoice.status,
+      client: invoice.client ? {
+        name: invoice.client.name,
+        email: invoice.client.email,
+        phone: invoice.client.phone,
+        address: invoice.client.address,
+        tax_id: invoice.client.tax_id,
+      } : undefined,
+      items: items.map((it: any) => ({
+        name: it.name,
+        description: it.description,
+        quantity: it.quantity,
+        unit: it.unit || 'unité',
+        unit_price: it.unit_price,
+        subtotal: it.subtotal || it.quantity * it.unit_price,
+      })),
+      subtotal: invoice.subtotal || 0,
+      discount: invoice.discount || 0,
+      tax_rate: invoice.tax_rate || 18,
+      tax_amount: invoice.tax_amount || 0,
+      total: invoice.total || 0,
+      payment_terms: invoice.payment_terms,
+      notes: invoice.notes,
+      payments: payments.map((p: any) => ({
+        payment_date: p.payment_date,
+        method: p.method,
+        amount: p.amount,
+        reference: p.reference,
+      })),
+    }
+
+    const doc = generateInvoicePDF(pdfData)
+    const blob = doc.output('blob')
+    const filePath = `${invoice.invoice_number.replace(/\//g, '-')}.pdf`
+
+    const { success, error } = await savePDFAndUpdateRecord(
+      'invoices-pdf', filePath, blob, 'invoices', id
+    )
+
+    if (success) {
+      doc.save(`${invoice.invoice_number}.pdf`)
+      toast('success', 'PDF généré et sauvegardé avec succès')
+      load()
+    } else {
+      doc.save(`${invoice.invoice_number}.pdf`)
+      toast('warning', 'PDF téléchargé localement mais non sauvegardé: ' + (error || ''))
+    }
+  }
+
+  async function openStoredPDF() {
+    if (!invoice?.file_url) return
+    const parts = invoice.file_url.split('/')
+    const bucket = parts[0]
+    const path = parts.slice(1).join('/')
+    const url = await getSignedPDFUrl(bucket, path)
+    if (url) window.open(url, '_blank')
+    else toast('error', 'Impossible de récupérer le PDF')
+  }
+
   if (loading) return <div className="invoice-state invoice-state--loading" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh', color: '#999' }}><span className="invoice-state__message">Chargement...</span></div>
   if (!invoice) return <div className="invoice-state invoice-state--empty" style={{ padding: 40, textAlign: 'center', color: '#999' }}><span className="invoice-state__message">Facture introuvable</span></div>
 
@@ -401,7 +470,9 @@ ${payment.notes ? `<div style="padding:12px 16px;background:#f8f5ee;border-radiu
           {isOverdue && <span className="badge badge-red">⚠️ En retard</span>}
         </div>
         <div className="invoice-page__header-actions" style={{ display: 'flex', gap: 10 }}>
-          <button type="button" className="btn-ghost invoice-btn invoice-btn--print-pdf" onClick={generatePDF}>🖨️ Imprimer / PDF</button>
+          <button type="button" className="btn-ghost invoice-btn invoice-btn--print-pdf" onClick={generatePDF}>🖨️ Imprimer</button>
+          <button type="button" className="btn-ghost invoice-btn" onClick={downloadAndStorePDF}>📥 Télécharger PDF</button>
+          {invoice.file_url && <button type="button" className="btn-ghost invoice-btn" onClick={openStoredPDF}>📄 Voir PDF archivé</button>}
           <Link href={`/invoices/new?duplicate=${invoice.id}`} className="btn-ghost invoice-btn invoice-btn--duplicate" style={{ textDecoration: 'none' }}>📋 Dupliquer</Link>
           {invoice.status === 'draft' && (
             <Link href={`/invoices/${invoice.id}/edit`} className="btn-amber invoice-btn invoice-btn--edit" style={{ textDecoration: 'none' }}>✏️ Modifier</Link>
@@ -564,7 +635,9 @@ ${payment.notes ? `<div style="padding:12px 16px;background:#f8f5ee;border-radiu
             <div className="invoice-section invoice-section--actions-detail" style={{ background: 'white', borderRadius: 12, border: '1px solid #e8e4db', padding: '20px' }}>
               <div className="invoice-section__title" style={{ fontWeight: 700, color: 'var(--hub-green)', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 12 }}>Actions</div>
               <div className="invoice-detail-actions" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                <button type="button" className="btn-primary invoice-btn invoice-btn--print-pdf-aside" style={{ justifyContent: 'center', padding: '11px' }} onClick={generatePDF}>🖨️ Imprimer / Télécharger PDF</button>
+                <button type="button" className="btn-primary invoice-btn invoice-btn--print-pdf-aside" style={{ justifyContent: 'center', padding: '11px' }} onClick={downloadAndStorePDF}>📥 Télécharger PDF</button>
+                <button type="button" className="btn-ghost invoice-btn" style={{ justifyContent: 'center', padding: '11px' }} onClick={generatePDF}>🖨️ Imprimer</button>
+                {invoice.file_url && <button type="button" className="btn-ghost invoice-btn" style={{ justifyContent: 'center', padding: '11px' }} onClick={openStoredPDF}>📄 Voir PDF archivé</button>}
 
                 {/* DRAFT : soumettre */}
                 {invoice.status === 'draft' && (

@@ -3,6 +3,7 @@ import { useEffect, useState, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import type { Client, Product } from '@/types'
+import { useToast } from '@/components/ui/Toast'
 
 const UNITS = ['kg', 'g', 'L', 'ml', 'carton', 'sac', 'pièce', 'heure', 'forfait', 'unité']
 
@@ -24,6 +25,7 @@ export default function NewQuotePage() {
   const [items, setItems] = useState<LineItem[]>([emptyLine()])
   const [saving, setSaving] = useState(false)
   const supabase = createClient()
+  const { toast } = useToast()
 
   const subtotal = items.reduce((s, it) => s + it.quantity * it.unit_price, 0)
   const afterDiscount = subtotal - (form.discount || 0)
@@ -44,7 +46,7 @@ export default function NewQuotePage() {
 
   async function handleSave(targetStatus: 'draft' | 'pending') {
     const validItems = items.filter(it => it.name.trim() && it.quantity > 0)
-    if (validItems.length === 0) { alert('Ajoutez au moins une ligne.'); return }
+    if (validItems.length === 0) { toast('warning', 'Ajoutez au moins une ligne.'); return }
     setSaving(true)
     try {
       const { data: userData } = await supabase.auth.getUser()
@@ -86,7 +88,7 @@ export default function NewQuotePage() {
 
       router.push(`/quotes/${doc.id}`)
     } catch (err: unknown) {
-      alert('Erreur: ' + (err instanceof Error ? err.message : String(err)))
+      toast('error', 'Erreur: ' + (err instanceof Error ? err.message : String(err)))
     } finally { setSaving(false) }
   }
 
