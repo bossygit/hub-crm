@@ -908,12 +908,30 @@ INSERT INTO clients (name, type, email, phone, address, tax_id) VALUES
 ON CONFLICT DO NOTHING;
 
 INSERT INTO products (name, category, quantity, unit, threshold_alert, price_per_unit) VALUES
-  ('Farine de manioc', 'Céréales transformées', 450, 'kg', 50, 850),
-  ('Huile de palme raffinée', 'Huiles & graisses', 120, 'L', 30, 1200),
-  ('Arachides décortiquées', 'Légumineuses', 85, 'kg', 100, 950),
-  ('Jus de fruit tropical', 'Boissons', 24, 'carton', 20, 3500),
-  ('Feuilles de manioc séchées', 'Légumes transformés', 8, 'kg', 15, 600),
-  ('Riz local étuvé', 'Céréales transformées', 200, 'kg', 50, 700)
+  -- Chocolats
+  ('Chocolat noir à la cardamome d''Afrique centrale', 'Chocolats', 50, 'pièce', 20, 3500),
+  ('Chocolat noir 100% sans sucre ajouté', 'Chocolats', 50, 'pièce', 20, 3500),
+  ('Chocolat noir 75% NZOKO', 'Chocolats', 50, 'pièce', 20, 2000),
+  ('Chocolat noir 70% aux éclats d''arachides sucrées', 'Chocolats', 50, 'pièce', 20, 3500),
+  ('Chocolat noir 70%', 'Chocolats', 50, 'pièce', 20, 2000),
+  ('Chocolat au lait aux éclats d''arachides sucrées', 'Chocolats', 50, 'pièce', 20, 3000),
+  ('Chocolat au lait', 'Chocolats', 50, 'pièce', 20, 2000),
+  ('Chocolat Noir 70% Kongo', 'Chocolats', 50, 'pièce', 20, 1800),
+  -- Farines / Céréales
+  ('Farine de maïs jaune 700g', 'Farines / Céréales', 50, 'pièce', 30, 1000),
+  ('Semoule de manioc 700g', 'Farines / Céréales', 50, 'pièce', 30, 1000),
+  ('Farine de maïs blanc 700g', 'Farines / Céréales', 50, 'pièce', 30, 1000),
+  ('Farine de soja', 'Farines / Céréales', 50, 'pièce', 30, 2000),
+  ('Farine de manioc 700g', 'Farines / Céréales', 50, 'pièce', 30, 1000),
+  -- Graines / Légumineuses
+  ('Haricot 700g', 'Graines / Légumineuses', 50, 'pièce', 20, 2000),
+  ('Fève de cacao torréfiée 700g', 'Graines / Légumineuses', 50, 'pièce', 20, 6000),
+  ('Graine de soja', 'Graines / Légumineuses', 50, 'pièce', 20, 2000),
+  -- Autres produits alimentaires
+  ('Pâte d''arachide', 'Autres produits alimentaires', 50, 'pièce', 20, 6000),
+  ('Gari', 'Autres produits alimentaires', 50, 'pièce', 20, 1500),
+  ('Bulukutu', 'Autres produits alimentaires', 50, 'pièce', 20, 700),
+  ('Bissap Hibiscus', 'Autres produits alimentaires', 50, 'pièce', 20, 1500)
 ON CONFLICT DO NOTHING;
 
 INSERT INTO jobs (title, department, description, requirements, type, deadline) VALUES
