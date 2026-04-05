@@ -371,17 +371,16 @@ DECLARE
   v_tax_amount numeric;
   v_total numeric;
 BEGIN
-  SELECT
-    COALESCE(sum(quantity * unit_price), 0),
-    COALESCE(i.discount, 0),
-    COALESCE(i.tax_rate, 18)
-  INTO v_subtotal, v_discount, v_tax_rate
-  FROM invoice_items ii
-  JOIN invoices i ON i.id = ii.invoice_id
-  WHERE ii.invoice_id = p_invoice_id
-  GROUP BY i.discount, i.tax_rate;
+  SELECT COALESCE(i.discount, 0), COALESCE(i.tax_rate, 18)
+  INTO v_discount, v_tax_rate
+  FROM invoices i
+  WHERE i.id = p_invoice_id;
 
-  IF v_subtotal IS NULL THEN v_subtotal := 0; END IF;
+  SELECT COALESCE(sum(quantity * unit_price), 0)
+  INTO v_subtotal
+  FROM invoice_items
+  WHERE invoice_id = p_invoice_id;
+
   v_tax_amount := (v_subtotal - v_discount) * v_tax_rate / 100;
   v_total := v_subtotal - v_discount + v_tax_amount;
 
