@@ -3,6 +3,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { Employee } from '@/types'
 import { useToast } from '@/components/ui/Toast'
+import { generateCertificatePDF } from '@/lib/pdf/generateCertificatePDF'
 
 const contractLabels: Record<string, string> = { cdi: 'CDI', cdd: 'CDD', stage: 'Stage', freelance: 'Freelance' }
 
@@ -19,12 +20,13 @@ export default function CertificatesPage() {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [{ data: d }, { data: e }] = await Promise.all([
+    const [docsRes, empRes] = await Promise.all([
       supabase.from('employee_documents').select('*, employee:employees(id,full_name,position,department,hire_date,contract_type,employee_number)')
         .eq('type', 'attestation_travail').order('created_at', { ascending: false }),
       supabase.from('employees').select('*').eq('status', 'actif').order('full_name'),
     ])
-    setDocs(d || []); setEmployees(e || []); setLoading(false)
+    if (docsRes.error || empRes.error) toast('error', 'Erreur de chargement des attestations.')
+    setDocs(docsRes.data || []); setEmployees(empRes.data || []); setLoading(false)
   }, [])
 
   useEffect(() => { load() }, [load])
@@ -63,6 +65,22 @@ export default function CertificatesPage() {
     const { error } = await supabase.from('employee_documents').delete().eq('id', docId)
     if (error) toast('error', `Erreur : ${error.message}`)
     else { toast('success', 'Attestation supprimée.'); load() }
+  }
+
+  function downloadCertificatePDF(doc: any) {
+    const emp = doc.employee
+    const pdf = generateCertificatePDF({
+      employee_name: emp?.full_name || '\u2014',
+      position: emp?.position || '\u2014',
+      department: emp?.department || '\u2014',
+      contract_type: emp?.contract_type || 'cdi',
+      hire_date: emp?.hire_date || new Date().toISOString(),
+      employee_number: emp?.employee_number || undefined,
+      purpose: doc.content?.purpose || undefined,
+      issued_date: doc.issued_date || doc.created_at || new Date().toISOString(),
+      doc_ref: doc.id?.slice(-8).toUpperCase() || undefined,
+    })
+    pdf.save(`Attestation_${emp?.full_name || 'employe'}.pdf`)
   }
 
   function printCertificate(doc: any) {
@@ -133,7 +151,8 @@ export default function CertificatesPage() {
                     <td style={{ fontSize: '0.85rem', color: '#666' }}>{new Date(d.issued_date || d.created_at).toLocaleDateString('fr-FR')}</td>
                     <td>
                       <div style={{ display: 'flex', gap: 4 }}>
-                        <button className="btn-ghost" style={{ padding: '5px 10px', fontSize: '0.75rem' }} onClick={() => printCertificate(d)}>🖨️</button>
+                        <button className="btn-ghost" style={{ padding: '5px 10px', fontSize: '0.75rem' }} onClick={() => downloadCertificatePDF(d)} title="T\u00e9l\u00e9charger PDF">📥</button>
+                        <button className="btn-ghost" style={{ padding: '5px 10px', fontSize: '0.75rem' }} onClick={() => printCertificate(d)} title="Imprimer">🖨️</button>
                         <button className="btn-ghost" style={{ padding: '5px 10px', fontSize: '0.75rem' }} onClick={() => openEdit(d)}>✏️</button>
                         <button className="btn-danger" style={{ padding: '5px 10px', fontSize: '0.75rem' }} onClick={() => handleDelete(d.id)}>🗑️</button>
                       </div>

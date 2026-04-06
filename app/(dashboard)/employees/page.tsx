@@ -2,6 +2,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import Link from 'next/link'
+import { useToast } from '@/components/ui/Toast'
 import type { Employee } from '@/types'
 
 const statusColors: Record<string, string> = { actif: 'badge-green', conge: 'badge-amber', suspendu: 'badge-red', sorti: 'badge-gray' }
@@ -25,10 +26,12 @@ export default function EmployeesPage() {
   const [docForm, setDocForm] = useState({ type: 'contrat', title: '', issued_date: new Date().toISOString().split('T')[0] })
   const [leaveBalance, setLeaveBalance] = useState<any>(null)
   const supabase = createClient()
+  const { toast } = useToast()
 
   const load = useCallback(async () => {
     setLoading(true)
-    const { data } = await supabase.from('employees').select('*').order('full_name')
+    const { data, error } = await supabase.from('employees').select('*').order('full_name')
+    if (error) { toast('error', 'Erreur de chargement des employés.'); setLoading(false); return }
     setEmployees(data || [])
     setLoading(false)
   }, [])
@@ -36,12 +39,14 @@ export default function EmployeesPage() {
   useEffect(() => { load() }, [load])
 
   async function loadEmpDocs(empId: string) {
-    const [{ data }, { data: lb }] = await Promise.all([
+    const [docsRes, lbRes] = await Promise.all([
       supabase.from('employee_documents').select('*').eq('employee_id', empId).order('created_at', { ascending: false }),
       supabase.from('leave_balances').select('*').eq('employee_id', empId).eq('year', new Date().getFullYear()).maybeSingle(),
     ])
-    setEmpDocs(data || [])
-    setLeaveBalance(lb)
+    if (docsRes.error) toast('error', 'Erreur chargement documents RH.')
+    if (lbRes.error) toast('error', 'Erreur chargement solde congés.')
+    setEmpDocs(docsRes.data || [])
+    setLeaveBalance(lbRes.data)
   }
 
   function openNew() { setEditing(null); setForm(emptyForm); setShowModal(true) }
@@ -55,23 +60,31 @@ export default function EmployeesPage() {
     e.preventDefault(); setSaving(true)
     const payload = { ...form, salary: form.salary || null }
     if (editing) {
-      await supabase.from('employees').update({ ...payload, updated_at: new Date().toISOString() }).eq('id', editing.id)
+      const { error } = await supabase.from('employees').update({ ...payload, updated_at: new Date().toISOString() }).eq('id', editing.id)
+      if (error) { toast('error', `Erreur : ${error.message}`); setSaving(false); return }
+      toast('success', 'Employé mis à jour.')
     } else {
       const num = `EMP-${String(Date.now()).slice(-5)}`
-      await supabase.from('employees').insert({ ...payload, employee_number: form.employee_number || num })
+      const { error } = await supabase.from('employees').insert({ ...payload, employee_number: form.employee_number || num })
+      if (error) { toast('error', `Erreur : ${error.message}`); setSaving(false); return }
+      toast('success', 'Employé créé.')
     }
     setSaving(false); setShowModal(false); load()
   }
 
   async function handleDelete(id: string) {
     if (!confirm('Archiver cet employé ?')) return
-    await supabase.from('employees').update({ status: 'sorti' }).eq('id', id)
+    const { error } = await supabase.from('employees').update({ status: 'sorti' }).eq('id', id)
+    if (error) { toast('error', `Erreur : ${error.message}`); return }
+    toast('success', 'Employé archivé.')
     load()
   }
 
   async function addDocument(e: React.FormEvent) {
     e.preventDefault(); setSaving(true)
-    await supabase.from('employee_documents').insert({ ...docForm, employee_id: selected!.id })
+    const { error } = await supabase.from('employee_documents').insert({ ...docForm, employee_id: selected!.id })
+    if (error) { toast('error', `Erreur : ${error.message}`); setSaving(false); return }
+    toast('success', 'Document ajouté.')
     setSaving(false); setShowDocModal(false)
     setDocForm({ type: 'contrat', title: '', issued_date: new Date().toISOString().split('T')[0] })
     loadEmpDocs(selected!.id)

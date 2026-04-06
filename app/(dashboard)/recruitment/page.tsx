@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { useToast } from '@/components/ui/Toast'
 import type { Job, Candidate } from '@/types'
 
 const statusColors: Record<string, string> = {
@@ -24,16 +25,19 @@ export default function RecruitmentPage() {
   const [jobForm, setJobForm] = useState(emptyJob)
   const [saving, setSaving] = useState(false)
   const supabase = createClient()
+  const { toast } = useToast()
 
   async function loadJobs() {
-    const { data } = await supabase.from('jobs').select('*').order('created_at', { ascending: false })
+    const { data, error } = await supabase.from('jobs').select('*').order('created_at', { ascending: false })
+    if (error) { toast('error', 'Erreur de chargement des offres.'); return }
     setJobs(data || [])
   }
 
   async function loadCandidates(jobId?: string) {
     let q = supabase.from('candidates').select('*, job:jobs(title)').order('created_at', { ascending: false })
     if (jobId) q = q.eq('job_id', jobId)
-    const { data } = await q
+    const { data, error } = await q
+    if (error) { toast('error', 'Erreur de chargement des candidats.'); return }
     setCandidates(data || [])
   }
 
@@ -49,20 +53,29 @@ export default function RecruitmentPage() {
   async function saveJob(e: React.FormEvent) {
     e.preventDefault(); setSaving(true)
     if (editingJob) {
-      await supabase.from('jobs').update(jobForm).eq('id', editingJob.id)
+      const { error } = await supabase.from('jobs').update(jobForm).eq('id', editingJob.id)
+      if (error) { toast('error', `Erreur : ${error.message}`); setSaving(false); return }
+      toast('success', 'Offre mise à jour.')
     } else {
-      await supabase.from('jobs').insert({ ...jobForm, status: 'open' })
+      const { error } = await supabase.from('jobs').insert({ ...jobForm, status: 'open' })
+      if (error) { toast('error', `Erreur : ${error.message}`); setSaving(false); return }
+      toast('success', 'Offre publiée.')
     }
     setSaving(false); setShowJobModal(false); loadJobs()
   }
 
   async function toggleJobStatus(j: Job) {
-    await supabase.from('jobs').update({ status: j.status === 'open' ? 'closed' : 'open' }).eq('id', j.id)
+    const newStatus = j.status === 'open' ? 'closed' : 'open'
+    const { error } = await supabase.from('jobs').update({ status: newStatus }).eq('id', j.id)
+    if (error) { toast('error', `Erreur : ${error.message}`); return }
+    toast('success', newStatus === 'open' ? 'Offre réouverte.' : 'Offre fermée.')
     loadJobs()
   }
 
   async function updateCandidateStatus(id: string, status: string) {
-    await supabase.from('candidates').update({ status }).eq('id', id)
+    const { error } = await supabase.from('candidates').update({ status }).eq('id', id)
+    if (error) { toast('error', `Erreur : ${error.message}`); return }
+    toast('success', 'Statut du candidat mis à jour.')
     loadCandidates(selectedJob?.id)
   }
 

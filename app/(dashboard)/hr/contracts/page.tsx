@@ -3,6 +3,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { Employee } from '@/types'
 import { useToast } from '@/components/ui/Toast'
+import { generateContractPDF } from '@/lib/pdf/generateContractPDF'
 
 const contractLabels: Record<string, string> = { cdi: 'CDI', cdd: 'CDD', stage: 'Stage', freelance: 'Freelance' }
 
@@ -24,12 +25,13 @@ export default function ContractsPage() {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [{ data: d }, { data: e }] = await Promise.all([
+    const [docsRes, empRes] = await Promise.all([
       supabase.from('employee_documents').select('*, employee:employees(id,full_name,position,department,contract_type,salary)')
         .eq('type', 'contrat').order('created_at', { ascending: false }),
       supabase.from('employees').select('*').eq('status', 'actif').order('full_name'),
     ])
-    setDocs(d || []); setEmployees(e || []); setLoading(false)
+    if (docsRes.error || empRes.error) toast('error', 'Erreur de chargement des contrats.')
+    setDocs(docsRes.data || []); setEmployees(empRes.data || []); setLoading(false)
   }, [])
 
   useEffect(() => { load() }, [load])
@@ -85,6 +87,23 @@ export default function ContractsPage() {
     const { error } = await supabase.from('employee_documents').delete().eq('id', docId)
     if (error) toast('error', `Erreur : ${error.message}`)
     else { toast('success', 'Contrat supprimé.'); load() }
+  }
+
+  function downloadContractPDF(doc: any) {
+    const emp = doc.employee
+    const c = doc.content || {}
+    const pdf = generateContractPDF({
+      employee_name: emp?.full_name || '\u2014',
+      position: c.position || emp?.position || '\u2014',
+      department: c.department || emp?.department || '\u2014',
+      contract_type: c.contract_type || 'cdi',
+      salary: Number(c.salary || 0),
+      start_date: doc.start_date || doc.issued_date || new Date().toISOString(),
+      end_date: doc.end_date || null,
+      issued_date: doc.issued_date || doc.created_at || new Date().toISOString(),
+      clauses: c.clauses || undefined,
+    })
+    pdf.save(`Contrat_${emp?.full_name || 'employe'}.pdf`)
   }
 
   function printContract(doc: any) {
@@ -183,7 +202,8 @@ ${c.clauses ? `<h2>Article 7 — Clauses particulieres</h2><div class="article">
                       <td style={{ fontSize: '0.85rem', color: '#666' }}>{d.end_date ? new Date(d.end_date).toLocaleDateString('fr-FR') : 'Indetermine'}</td>
                       <td>
                         <div style={{ display: 'flex', gap: 4 }}>
-                          <button className="btn-ghost" style={{ padding: '5px 10px', fontSize: '0.75rem' }} onClick={() => printContract(d)}>🖨️</button>
+                          <button className="btn-ghost" style={{ padding: '5px 10px', fontSize: '0.75rem' }} onClick={() => downloadContractPDF(d)} title="T\u00e9l\u00e9charger PDF">📥</button>
+                          <button className="btn-ghost" style={{ padding: '5px 10px', fontSize: '0.75rem' }} onClick={() => printContract(d)} title="Imprimer">🖨️</button>
                           <button className="btn-ghost" style={{ padding: '5px 10px', fontSize: '0.75rem' }} onClick={() => openEdit(d)}>✏️</button>
                           <button className="btn-danger" style={{ padding: '5px 10px', fontSize: '0.75rem' }} onClick={() => handleDelete(d.id)}>🗑️</button>
                         </div>

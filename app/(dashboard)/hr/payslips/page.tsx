@@ -3,6 +3,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { Employee } from '@/types'
 import { useToast } from '@/components/ui/Toast'
+import { generatePayslipPDF } from '@/lib/pdf/generatePayslipPDF'
 
 const months = ['Janvier', 'Fevrier', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Aout', 'Septembre', 'Octobre', 'Novembre', 'Decembre']
 
@@ -26,12 +27,13 @@ export default function PayslipsPage() {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [{ data: d }, { data: e }] = await Promise.all([
+    const [docsRes, empRes] = await Promise.all([
       supabase.from('employee_documents').select('*, employee:employees(id,full_name,position,department,employee_number)')
         .eq('type', 'fiche_paie').order('created_at', { ascending: false }),
       supabase.from('employees').select('*').eq('status', 'actif').order('full_name'),
     ])
-    setDocs(d || []); setEmployees(e || []); setLoading(false)
+    if (docsRes.error || empRes.error) toast('error', 'Erreur de chargement des bulletins.')
+    setDocs(docsRes.data || []); setEmployees(empRes.data || []); setLoading(false)
   }, [])
 
   useEffect(() => { load() }, [load])
@@ -98,6 +100,34 @@ export default function PayslipsPage() {
     const { error } = await supabase.from('employee_documents').delete().eq('id', docId)
     if (error) toast('error', `Erreur : ${error.message}`)
     else { toast('success', 'Bulletin supprimé.'); load() }
+  }
+
+  function downloadPayslipPDF(doc: any) {
+    const c = doc.content || {}
+    const emp = doc.employee
+    const monthNames = ['Janvier', 'Fevrier', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Aout', 'Septembre', 'Octobre', 'Novembre', 'Decembre']
+    const pdf = generatePayslipPDF({
+      employee_name: c.employee_name || emp?.full_name || '\u2014',
+      position: c.employee_position || emp?.position || '\u2014',
+      department: c.employee_department || emp?.department || '\u2014',
+      employee_number: c.employee_number || emp?.employee_number || undefined,
+      month: monthNames[c.month] || '',
+      year: c.year || '',
+      base_salary: Number(c.base_salary || 0),
+      transport: Number(c.transport || 0),
+      housing: Number(c.housing || 0),
+      bonus: Number(c.bonus || 0),
+      gross: Number(c.gross || 0),
+      cnss_rate: Number(c.cnss_rate || 4),
+      cnss: Number(c.cnss || 0),
+      its_rate: Number(c.its_rate || 5),
+      its: Number(c.its || 0),
+      other_deduction: Number(c.other_deduction || 0),
+      totalDeductions: Number(c.totalDeductions || 0),
+      net: Number(c.net || 0),
+    })
+    const name = c.employee_name || emp?.full_name || 'employe'
+    pdf.save(`Bulletin_${monthNames[c.month] || ''}_${c.year || ''}_${name}.pdf`)
   }
 
   function printPayslip(doc: any) {
@@ -198,7 +228,8 @@ ${Number(c.other_deduction) > 0 ? `<tr><td>Autres retenues</td><td>- ${Number(c.
                       <td style={{ fontWeight: 700, color: '#065f46' }}>{Number(c.net || 0).toLocaleString('fr-FR')} FCFA</td>
                       <td>
                         <div style={{ display: 'flex', gap: 4 }}>
-                          <button className="btn-ghost" style={{ padding: '5px 10px', fontSize: '0.75rem' }} onClick={() => printPayslip(d)}>🖨️</button>
+                          <button className="btn-ghost" style={{ padding: '5px 10px', fontSize: '0.75rem' }} onClick={() => downloadPayslipPDF(d)} title="T\u00e9l\u00e9charger PDF">📥</button>
+                          <button className="btn-ghost" style={{ padding: '5px 10px', fontSize: '0.75rem' }} onClick={() => printPayslip(d)} title="Imprimer">🖨️</button>
                           <button className="btn-ghost" style={{ padding: '5px 10px', fontSize: '0.75rem' }} onClick={() => openEdit(d)}>✏️</button>
                           <button className="btn-danger" style={{ padding: '5px 10px', fontSize: '0.75rem' }} onClick={() => handleDelete(d.id)}>🗑️</button>
                         </div>

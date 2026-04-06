@@ -41,13 +41,14 @@ export default function LeavesPage() {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [{ data: l }, { data: b }, { data: e }] = await Promise.all([
+    const [leavesRes, balRes, empRes] = await Promise.all([
       supabase.from('employee_documents').select('*, employee:employees(id,full_name,position,department)')
         .eq('type', 'conge').order('created_at', { ascending: false }),
       supabase.from('leave_balances').select('*, employee:employees(id,full_name,department)').order('year', { ascending: false }),
       supabase.from('employees').select('*').eq('status', 'actif').order('full_name'),
     ])
-    setLeaves(l || []); setBalances(b || []); setEmployees(e || []); setLoading(false)
+    if (leavesRes.error || balRes.error || empRes.error) toast('error', 'Erreur de chargement des congés.')
+    setLeaves(leavesRes.data || []); setBalances(balRes.data || []); setEmployees(empRes.data || []); setLoading(false)
   }, [])
 
   useEffect(() => { load() }, [load])
@@ -125,9 +126,11 @@ export default function LeavesPage() {
 
   async function updateStatus(docId: string, status: 'approved' | 'rejected') {
     const { data: userData } = await supabase.auth.getUser()
-    await supabase.from('employee_documents').update({
+    const { error } = await supabase.from('employee_documents').update({
       status, approved_by: userData.user?.id, approved_at: new Date().toISOString(),
     }).eq('id', docId)
+    if (error) { toast('error', `Erreur : ${error.message}`); return }
+    toast('success', status === 'approved' ? 'Demande approuvée.' : 'Demande refusée.')
     load()
   }
 
