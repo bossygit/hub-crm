@@ -697,7 +697,12 @@ CREATE TABLE IF NOT EXISTS leave_balances (
 );
 
 ALTER TABLE leave_balances ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "leave_balances_all" ON leave_balances FOR ALL USING (auth.role() = 'authenticated');
+CREATE POLICY "leave_balances_manager" ON leave_balances FOR ALL USING (
+  EXISTS (
+    SELECT 1 FROM profiles
+    WHERE id = auth.uid() AND role IN ('ceo', 'manager', 'admin')
+  )
+);
 
 -- Trigger: gestion congés
 CREATE OR REPLACE FUNCTION process_leave_approval()
