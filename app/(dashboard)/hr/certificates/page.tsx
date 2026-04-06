@@ -12,6 +12,7 @@ export default function CertificatesPage() {
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [editing, setEditing] = useState<any>(null)
   const [form, setForm] = useState({ employee_id: '', purpose: '' })
   const supabase = createClient()
   const { toast } = useToast()
@@ -28,18 +29,40 @@ export default function CertificatesPage() {
 
   useEffect(() => { load() }, [load])
 
+  function openEdit(doc: any) {
+    setEditing(doc)
+    setForm({ employee_id: doc.employee_id || '', purpose: doc.content?.purpose || '' })
+    setShowModal(true)
+  }
+
   async function handleSave(e: React.FormEvent) {
     e.preventDefault()
     if (!form.employee_id) { toast('warning', 'Sélectionnez un employé.'); return }
     setSaving(true)
     const emp = employees.find(em => em.id === form.employee_id)
-    await supabase.from('employee_documents').insert({
-      employee_id: form.employee_id, type: 'attestation_travail', status: 'approved',
+    const payload = {
+      employee_id: form.employee_id,
       title: `Attestation de travail — ${emp?.full_name || ''}`,
       issued_date: new Date().toISOString().split('T')[0],
       content: { purpose: form.purpose },
-    })
-    setSaving(false); setShowModal(false); load()
+    }
+    if (editing) {
+      const { error } = await supabase.from('employee_documents').update(payload).eq('id', editing.id)
+      if (error) toast('error', `Erreur : ${error.message}`)
+      else toast('success', 'Attestation mise à jour.')
+    } else {
+      const { error } = await supabase.from('employee_documents').insert({ ...payload, type: 'attestation_travail', status: 'approved' })
+      if (error) toast('error', `Erreur : ${error.message}`)
+      else toast('success', 'Attestation créée.')
+    }
+    setSaving(false); setShowModal(false); setEditing(null); load()
+  }
+
+  async function handleDelete(docId: string) {
+    if (!confirm('Supprimer définitivement cette attestation ?')) return
+    const { error } = await supabase.from('employee_documents').delete().eq('id', docId)
+    if (error) toast('error', `Erreur : ${error.message}`)
+    else { toast('success', 'Attestation supprimée.'); load() }
   }
 
   function printCertificate(doc: any) {
@@ -89,7 +112,7 @@ export default function CertificatesPage() {
     <div className="invoice-page">
       <div className="page-header">
         <h2>🏛 Attestations de travail</h2>
-        <button className="btn-primary" onClick={() => { setForm({ employee_id: '', purpose: '' }); setShowModal(true) }}>+ Generer une attestation</button>
+        <button className="btn-primary" onClick={() => { setEditing(null); setForm({ employee_id: '', purpose: '' }); setShowModal(true) }}>+ Générer une attestation</button>
       </div>
 
       <div style={{ padding: '24px 32px' }}>
@@ -108,7 +131,13 @@ export default function CertificatesPage() {
                     <td style={{ color: '#555' }}>{d.employee?.position || '—'}</td>
                     <td><span className="badge badge-gray">{d.employee?.department || '—'}</span></td>
                     <td style={{ fontSize: '0.85rem', color: '#666' }}>{new Date(d.issued_date || d.created_at).toLocaleDateString('fr-FR')}</td>
-                    <td><button className="btn-ghost" style={{ padding: '5px 10px', fontSize: '0.75rem' }} onClick={() => printCertificate(d)}>🖨️ Imprimer</button></td>
+                    <td>
+                      <div style={{ display: 'flex', gap: 4 }}>
+                        <button className="btn-ghost" style={{ padding: '5px 10px', fontSize: '0.75rem' }} onClick={() => printCertificate(d)}>🖨️</button>
+                        <button className="btn-ghost" style={{ padding: '5px 10px', fontSize: '0.75rem' }} onClick={() => openEdit(d)}>✏️</button>
+                        <button className="btn-danger" style={{ padding: '5px 10px', fontSize: '0.75rem' }} onClick={() => handleDelete(d.id)}>🗑️</button>
+                      </div>
+                    </td>
                   </tr>
                 ))}
                 {docs.length === 0 && <tr><td colSpan={5} style={{ textAlign: 'center', padding: 48, color: '#999' }}>Aucune attestation</td></tr>}
@@ -121,7 +150,7 @@ export default function CertificatesPage() {
       {showModal && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowModal(false)}>
           <div className="modal-box">
-            <div className="modal-title">🏛 Generer une attestation de travail</div>
+            <div className="modal-title">{editing ? '✏️ Modifier l\'attestation' : '🏛 Générer une attestation de travail'}</div>
             <form onSubmit={handleSave}>
               <div className="hub-form-group"><label>Employe *</label>
                 <select className="hub-select" required value={form.employee_id} onChange={e => setForm(f => ({ ...f, employee_id: e.target.value }))}>
@@ -134,7 +163,7 @@ export default function CertificatesPage() {
               </div>
               <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', marginTop: 8 }}>
                 <button type="button" className="btn-ghost" onClick={() => setShowModal(false)}>Annuler</button>
-                <button type="submit" className="btn-primary" disabled={saving}>{saving ? '...' : 'Generer'}</button>
+                <button type="submit" className="btn-primary" disabled={saving}>{saving ? '...' : editing ? 'Mettre à jour' : 'Générer'}</button>
               </div>
             </form>
           </div>

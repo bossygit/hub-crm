@@ -13,13 +13,15 @@ export default function PayslipsPage() {
   const [showModal, setShowModal] = useState(false)
   const [saving, setSaving] = useState(false)
   const [search, setSearch] = useState('')
+  const [editing, setEditing] = useState<any>(null)
   const { toast } = useToast()
   const now = new Date()
-  const [form, setForm] = useState({
+  const emptyForm = {
     employee_id: '', month: now.getMonth(), year: now.getFullYear(),
     base_salary: 0, transport: 0, housing: 0, bonus: 0,
     cnss_rate: 4, its_rate: 5, other_deduction: 0,
-  })
+  }
+  const [form, setForm] = useState(emptyForm)
   const supabase = createClient()
 
   const load = useCallback(async () => {
@@ -49,19 +51,53 @@ export default function PayslipsPage() {
     return { gross, cnss, its, totalDeductions, net }
   }
 
+  function openEdit(doc: any) {
+    const c = doc.content || {}
+    setEditing(doc)
+    setForm({
+      employee_id: doc.employee_id || '',
+      month: c.month ?? now.getMonth(),
+      year: c.year ?? now.getFullYear(),
+      base_salary: c.base_salary || 0,
+      transport: c.transport || 0,
+      housing: c.housing || 0,
+      bonus: c.bonus || 0,
+      cnss_rate: c.cnss_rate ?? 4,
+      its_rate: c.its_rate ?? 5,
+      other_deduction: c.other_deduction || 0,
+    })
+    setShowModal(true)
+  }
+
   async function handleSave(e: React.FormEvent) {
     e.preventDefault()
     if (!form.employee_id) { toast('warning', 'Sélectionnez un employé.'); return }
     setSaving(true)
     const emp = employees.find(em => em.id === form.employee_id)
     const calc = compute()
-    await supabase.from('employee_documents').insert({
-      employee_id: form.employee_id, type: 'fiche_paie', status: 'approved',
+    const payload = {
+      employee_id: form.employee_id,
       title: `Bulletin de paie ${months[form.month]} ${form.year} — ${emp?.full_name || ''}`,
       issued_date: `${form.year}-${String(form.month + 1).padStart(2, '0')}-${new Date(form.year, form.month + 1, 0).getDate()}`,
       content: { ...form, ...calc, employee_name: emp?.full_name, employee_position: emp?.position, employee_department: emp?.department, employee_number: emp?.employee_number },
-    })
-    setSaving(false); setShowModal(false); load()
+    }
+    if (editing) {
+      const { error } = await supabase.from('employee_documents').update(payload).eq('id', editing.id)
+      if (error) toast('error', `Erreur : ${error.message}`)
+      else toast('success', 'Bulletin mis à jour.')
+    } else {
+      const { error } = await supabase.from('employee_documents').insert({ ...payload, type: 'fiche_paie', status: 'approved' })
+      if (error) toast('error', `Erreur : ${error.message}`)
+      else toast('success', 'Bulletin créé.')
+    }
+    setSaving(false); setShowModal(false); setEditing(null); load()
+  }
+
+  async function handleDelete(docId: string) {
+    if (!confirm('Supprimer définitivement ce bulletin de paie ?')) return
+    const { error } = await supabase.from('employee_documents').delete().eq('id', docId)
+    if (error) toast('error', `Erreur : ${error.message}`)
+    else { toast('success', 'Bulletin supprimé.'); load() }
   }
 
   function printPayslip(doc: any) {
@@ -135,7 +171,7 @@ ${Number(c.other_deduction) > 0 ? `<tr><td>Autres retenues</td><td>- ${Number(c.
     <div className="invoice-page">
       <div className="page-header">
         <h2>💵 Fiches de paie</h2>
-        <button className="btn-primary" onClick={() => { setForm({ employee_id: '', month: now.getMonth(), year: now.getFullYear(), base_salary: 0, transport: 0, housing: 0, bonus: 0, cnss_rate: 4, its_rate: 5, other_deduction: 0 }); setShowModal(true) }}>+ Generer un bulletin</button>
+        <button className="btn-primary" onClick={() => { setEditing(null); setForm(emptyForm); setShowModal(true) }}>+ Générer un bulletin</button>
       </div>
 
       <div style={{ padding: '24px 32px' }}>
@@ -160,7 +196,13 @@ ${Number(c.other_deduction) > 0 ? `<tr><td>Autres retenues</td><td>- ${Number(c.
                       <td style={{ color: '#555' }}>{Number(c.gross || 0).toLocaleString('fr-FR')} FCFA</td>
                       <td style={{ color: '#dc2626' }}>- {Number(c.totalDeductions || 0).toLocaleString('fr-FR')}</td>
                       <td style={{ fontWeight: 700, color: '#065f46' }}>{Number(c.net || 0).toLocaleString('fr-FR')} FCFA</td>
-                      <td><button className="btn-ghost" style={{ padding: '5px 10px', fontSize: '0.75rem' }} onClick={() => printPayslip(d)}>🖨️ PDF</button></td>
+                      <td>
+                        <div style={{ display: 'flex', gap: 4 }}>
+                          <button className="btn-ghost" style={{ padding: '5px 10px', fontSize: '0.75rem' }} onClick={() => printPayslip(d)}>🖨️</button>
+                          <button className="btn-ghost" style={{ padding: '5px 10px', fontSize: '0.75rem' }} onClick={() => openEdit(d)}>✏️</button>
+                          <button className="btn-danger" style={{ padding: '5px 10px', fontSize: '0.75rem' }} onClick={() => handleDelete(d.id)}>🗑️</button>
+                        </div>
+                      </td>
                     </tr>
                   )
                 })}
@@ -174,7 +216,7 @@ ${Number(c.other_deduction) > 0 ? `<tr><td>Autres retenues</td><td>- ${Number(c.
       {showModal && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowModal(false)}>
           <div className="modal-box" style={{ maxWidth: 620 }}>
-            <div className="modal-title">💵 Generer un bulletin de paie</div>
+            <div className="modal-title">{editing ? '✏️ Modifier le bulletin' : '💵 Générer un bulletin de paie'}</div>
             <form onSubmit={handleSave}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div className="hub-form-group" style={{ gridColumn: '1/-1' }}><label>Employe *</label>
@@ -229,7 +271,7 @@ ${Number(c.other_deduction) > 0 ? `<tr><td>Autres retenues</td><td>- ${Number(c.
 
               <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', marginTop: 12 }}>
                 <button type="button" className="btn-ghost" onClick={() => setShowModal(false)}>Annuler</button>
-                <button type="submit" className="btn-primary" disabled={saving}>{saving ? '...' : 'Generer le bulletin'}</button>
+                <button type="submit" className="btn-primary" disabled={saving}>{saving ? '...' : editing ? 'Mettre à jour' : 'Générer le bulletin'}</button>
               </div>
             </form>
           </div>

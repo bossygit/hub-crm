@@ -2,6 +2,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import Link from 'next/link'
+import { useToast } from '@/components/ui/Toast'
 import type { Invoice, ClientFinancialSummary } from '@/types'
 
 const statusConfig: Record<string, { label: string; badge: string; icon: string }> = {
@@ -21,6 +22,7 @@ export default function InvoicesPage() {
   const [statusFilter, setStatusFilter] = useState('all')
   const [duplicating, setDuplicating] = useState<string | null>(null)
   const supabase = createClient()
+  const { toast } = useToast()
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -74,6 +76,13 @@ export default function InvoicesPage() {
     }
     setDuplicating(null)
     load()
+  }
+
+  async function handleDelete(invId: string) {
+    if (!confirm('Supprimer définitivement cette facture brouillon ?')) return
+    const { error } = await supabase.from('invoices').delete().eq('id', invId)
+    if (error) toast('error', `Erreur : ${error.message}`)
+    else { toast('success', 'Facture supprimée.'); load() }
   }
 
   const filtered = invoices.filter(inv => {
@@ -195,6 +204,9 @@ export default function InvoicesPage() {
                         <div className="invoice-list__row-actions" style={{ display: 'flex', gap: 6 }}>
                           <Link href={`/invoices/${inv.id}`} className="btn-ghost invoice-btn invoice-btn--view-row" style={{ padding: '5px 10px', fontSize: '0.75rem', textDecoration: 'none' }}>Voir</Link>
                           <Link href={`/invoices/new?duplicate=${inv.id}`} className="btn-ghost invoice-btn invoice-btn--duplicate-row" style={{ padding: '5px 10px', fontSize: '0.75rem', textDecoration: 'none' }}>📋 Dupliquer</Link>
+                          {inv.status === 'draft' && (
+                            <button className="btn-danger" style={{ padding: '5px 10px', fontSize: '0.75rem' }} onClick={() => handleDelete(inv.id)}>🗑️</button>
+                          )}
                         </div>
                       </td>
                     </tr>

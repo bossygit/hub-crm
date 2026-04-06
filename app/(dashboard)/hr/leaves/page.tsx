@@ -33,9 +33,9 @@ export default function LeavesPage() {
   const [saving, setSaving] = useState(false)
   const [statusFilter, setStatusFilter] = useState('all')
   const [tab, setTab] = useState<'requests' | 'balances'>('requests')
-  const [form, setForm] = useState({
-    employee_id: '', leave_type: 'annuel', start_date: '', end_date: '', reason: '',
-  })
+  const [editing, setEditing] = useState<any>(null)
+  const emptyForm = { employee_id: '', leave_type: 'annuel', start_date: '', end_date: '', reason: '' }
+  const [form, setForm] = useState(emptyForm)
   const supabase = createClient()
   const { toast } = useToast()
 
@@ -52,38 +52,75 @@ export default function LeavesPage() {
 
   useEffect(() => { load() }, [load])
 
+  function openEdit(doc: any) {
+    const c = doc.content || {}
+    setEditing(doc)
+    setForm({
+      employee_id: doc.employee_id || '',
+      leave_type: c.leave_type || 'annuel',
+      start_date: doc.start_date || '',
+      end_date: doc.end_date || '',
+      reason: c.reason || '',
+    })
+    setShowModal(true)
+  }
+
   async function handleSave(e: React.FormEvent) {
     e.preventDefault()
     if (!form.employee_id || !form.start_date || !form.end_date) { toast('warning', 'Remplissez tous les champs obligatoires.'); return }
     setSaving(true)
     const emp = employees.find(em => em.id === form.employee_id)
     const days = workingDays(form.start_date, form.end_date)
-    const { data: newLeave } = await supabase.from('employee_documents').insert({
-      employee_id: form.employee_id, type: 'conge', status: 'pending',
-      title: `${leaveTypes[form.leave_type] || form.leave_type} — ${emp?.full_name || ''} (${days}j)`,
-      issued_date: new Date().toISOString().split('T')[0],
-      start_date: form.start_date, end_date: form.end_date,
-      content: { leave_type: form.leave_type, reason: form.reason, days },
-    }).select('id').single()
 
-    if (newLeave) {
-      try {
-        await fetch('/api/notifications/send', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            type: 'leave_pending',
-            title: `Demande de conge — ${emp?.full_name || ''}`,
-            message: `${leaveTypes[form.leave_type] || form.leave_type} du ${form.start_date} au ${form.end_date} (${days} jours)`,
-            referenceId: newLeave.id,
-            referenceType: 'leave',
-            link: '/hr/leaves',
-          }),
-        })
-      } catch { /* best-effort */ }
+    if (editing) {
+      const payload = {
+        employee_id: form.employee_id,
+        title: `${leaveTypes[form.leave_type] || form.leave_type} — ${emp?.full_name || ''} (${days}j)`,
+        start_date: form.start_date, end_date: form.end_date,
+        content: { leave_type: form.leave_type, reason: form.reason, days },
+      }
+      const { error } = await supabase.from('employee_documents').update(payload).eq('id', editing.id)
+      if (error) toast('error', `Erreur : ${error.message}`)
+      else toast('success', 'Demande mise à jour.')
+    } else {
+      const { data: newLeave, error } = await supabase.from('employee_documents').insert({
+        employee_id: form.employee_id, type: 'conge', status: 'pending',
+        title: `${leaveTypes[form.leave_type] || form.leave_type} — ${emp?.full_name || ''} (${days}j)`,
+        issued_date: new Date().toISOString().split('T')[0],
+        start_date: form.start_date, end_date: form.end_date,
+        content: { leave_type: form.leave_type, reason: form.reason, days },
+      }).select('id').single()
+
+      if (error) toast('error', `Erreur : ${error.message}`)
+      else {
+        toast('success', 'Demande soumise.')
+        if (newLeave) {
+          try {
+            await fetch('/api/notifications/send', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                type: 'leave_pending',
+                title: `Demande de conge — ${emp?.full_name || ''}`,
+                message: `${leaveTypes[form.leave_type] || form.leave_type} du ${form.start_date} au ${form.end_date} (${days} jours)`,
+                referenceId: newLeave.id,
+                referenceType: 'leave',
+                link: '/hr/leaves',
+              }),
+            })
+          } catch { /* best-effort */ }
+        }
+      }
     }
 
-    setSaving(false); setShowModal(false); load()
+    setSaving(false); setShowModal(false); setEditing(null); load()
+  }
+
+  async function handleDelete(docId: string) {
+    if (!confirm('Supprimer définitivement cette demande de congé ?')) return
+    const { error } = await supabase.from('employee_documents').delete().eq('id', docId)
+    if (error) toast('error', `Erreur : ${error.message}`)
+    else { toast('success', 'Demande supprimée.'); load() }
   }
 
   async function updateStatus(docId: string, status: 'approved' | 'rejected') {
@@ -112,7 +149,7 @@ export default function LeavesPage() {
     <div className="invoice-page">
       <div className="page-header">
         <h2>🏖 Gestion des conges</h2>
-        <button className="btn-primary" onClick={() => { setForm({ employee_id: '', leave_type: 'annuel', start_date: '', end_date: '', reason: '' }); setShowModal(true) }}>+ Nouvelle demande</button>
+        <button className="btn-primary" onClick={() => { setEditing(null); setForm(emptyForm); setShowModal(true) }}>+ Nouvelle demande</button>
       </div>
 
       <div style={{ padding: '24px 32px' }}>
@@ -166,11 +203,13 @@ export default function LeavesPage() {
                           <td style={{ color: '#555', fontSize: '0.85rem', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{(c as any).reason || '—'}</td>
                           <td><span className={`badge ${cfg.badge}`}>{cfg.icon} {cfg.label}</span></td>
                           <td>
-                            <div style={{ display: 'flex', gap: 6 }}>
+                            <div style={{ display: 'flex', gap: 4 }}>
                               {l.status === 'pending' && (
                                 <>
                                   <button className="btn-primary" style={{ padding: '5px 10px', fontSize: '0.72rem' }} onClick={() => { if (confirm('Approuver cette demande ?')) updateStatus(l.id, 'approved') }}>✅</button>
                                   <button className="btn-danger" style={{ padding: '5px 10px', fontSize: '0.72rem' }} onClick={() => { if (confirm('Refuser cette demande ?')) updateStatus(l.id, 'rejected') }}>❌</button>
+                                  <button className="btn-ghost" style={{ padding: '5px 10px', fontSize: '0.72rem' }} onClick={() => openEdit(l)}>✏️</button>
+                                  <button className="btn-danger" style={{ padding: '5px 10px', fontSize: '0.72rem' }} onClick={() => handleDelete(l.id)}>🗑️</button>
                                 </>
                               )}
                             </div>
@@ -221,7 +260,7 @@ export default function LeavesPage() {
       {showModal && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowModal(false)}>
           <div className="modal-box" style={{ maxWidth: 520 }}>
-            <div className="modal-title">🏖 Nouvelle demande de conge</div>
+            <div className="modal-title">{editing ? '✏️ Modifier la demande' : '🏖 Nouvelle demande de congé'}</div>
             <form onSubmit={handleSave}>
               <div className="hub-form-group"><label>Employe *</label>
                 <select className="hub-select" required value={form.employee_id} onChange={e => setForm(f => ({ ...f, employee_id: e.target.value }))}>
@@ -252,7 +291,7 @@ export default function LeavesPage() {
               </div>
               <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', marginTop: 8 }}>
                 <button type="button" className="btn-ghost" onClick={() => setShowModal(false)}>Annuler</button>
-                <button type="submit" className="btn-primary" disabled={saving}>{saving ? '...' : 'Soumettre la demande'}</button>
+                <button type="submit" className="btn-primary" disabled={saving}>{saving ? '...' : editing ? 'Mettre à jour' : 'Soumettre la demande'}</button>
               </div>
             </form>
           </div>

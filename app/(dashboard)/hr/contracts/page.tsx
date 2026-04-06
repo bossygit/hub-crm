@@ -13,11 +13,13 @@ export default function ContractsPage() {
   const [showModal, setShowModal] = useState(false)
   const [saving, setSaving] = useState(false)
   const [search, setSearch] = useState('')
+  const [editing, setEditing] = useState<any>(null)
   const { toast } = useToast()
-  const [form, setForm] = useState({
+  const emptyForm = {
     employee_id: '', contract_type: 'cdi', start_date: new Date().toISOString().split('T')[0],
     end_date: '', salary: 0, position: '', department: '', clauses: '',
-  })
+  }
+  const [form, setForm] = useState(emptyForm)
   const supabase = createClient()
 
   const load = useCallback(async () => {
@@ -38,19 +40,51 @@ export default function ContractsPage() {
     else setForm(f => ({ ...f, employee_id: empId }))
   }
 
+  function openEdit(doc: any) {
+    const c = doc.content || {}
+    setEditing(doc)
+    setForm({
+      employee_id: doc.employee_id || '',
+      contract_type: c.contract_type || 'cdi',
+      start_date: doc.start_date || '',
+      end_date: doc.end_date || '',
+      salary: c.salary || 0,
+      position: c.position || '',
+      department: c.department || '',
+      clauses: c.clauses || '',
+    })
+    setShowModal(true)
+  }
+
   async function handleSave(e: React.FormEvent) {
     e.preventDefault()
     if (!form.employee_id) { toast('warning', 'Sélectionnez un employé.'); return }
     setSaving(true)
     const emp = employees.find(em => em.id === form.employee_id)
-    await supabase.from('employee_documents').insert({
-      employee_id: form.employee_id, type: 'contrat', status: 'approved',
+    const payload = {
+      employee_id: form.employee_id,
       title: `Contrat ${contractLabels[form.contract_type]} — ${emp?.full_name || ''}`,
       issued_date: form.start_date, start_date: form.start_date,
       end_date: form.contract_type === 'cdd' || form.contract_type === 'stage' ? form.end_date || null : null,
       content: { contract_type: form.contract_type, salary: form.salary, position: form.position, department: form.department, clauses: form.clauses },
-    })
-    setSaving(false); setShowModal(false); load()
+    }
+    if (editing) {
+      const { error } = await supabase.from('employee_documents').update(payload).eq('id', editing.id)
+      if (error) toast('error', `Erreur : ${error.message}`)
+      else toast('success', 'Contrat mis à jour.')
+    } else {
+      const { error } = await supabase.from('employee_documents').insert({ ...payload, type: 'contrat', status: 'approved' })
+      if (error) toast('error', `Erreur : ${error.message}`)
+      else toast('success', 'Contrat créé.')
+    }
+    setSaving(false); setShowModal(false); setEditing(null); load()
+  }
+
+  async function handleDelete(docId: string) {
+    if (!confirm('Supprimer définitivement ce contrat ?')) return
+    const { error } = await supabase.from('employee_documents').delete().eq('id', docId)
+    if (error) toast('error', `Erreur : ${error.message}`)
+    else { toast('success', 'Contrat supprimé.'); load() }
   }
 
   function printContract(doc: any) {
@@ -119,7 +153,7 @@ ${c.clauses ? `<h2>Article 7 — Clauses particulieres</h2><div class="article">
     <div className="invoice-page">
       <div className="page-header">
         <h2>📝 Contrats de travail</h2>
-        <button className="btn-primary" onClick={() => { setForm({ employee_id: '', contract_type: 'cdi', start_date: new Date().toISOString().split('T')[0], end_date: '', salary: 0, position: '', department: '', clauses: '' }); setShowModal(true) }}>+ Nouveau contrat</button>
+        <button className="btn-primary" onClick={() => { setEditing(null); setForm(emptyForm); setShowModal(true) }}>+ Nouveau contrat</button>
       </div>
 
       <div style={{ padding: '24px 32px' }}>
@@ -147,7 +181,13 @@ ${c.clauses ? `<h2>Article 7 — Clauses particulieres</h2><div class="article">
                       <td style={{ fontWeight: 700 }}>{Number((c as any).salary || 0).toLocaleString('fr-FR')} FCFA</td>
                       <td style={{ fontSize: '0.85rem', color: '#666' }}>{d.start_date ? new Date(d.start_date).toLocaleDateString('fr-FR') : '—'}</td>
                       <td style={{ fontSize: '0.85rem', color: '#666' }}>{d.end_date ? new Date(d.end_date).toLocaleDateString('fr-FR') : 'Indetermine'}</td>
-                      <td><button className="btn-ghost" style={{ padding: '5px 10px', fontSize: '0.75rem' }} onClick={() => printContract(d)}>🖨️ PDF</button></td>
+                      <td>
+                        <div style={{ display: 'flex', gap: 4 }}>
+                          <button className="btn-ghost" style={{ padding: '5px 10px', fontSize: '0.75rem' }} onClick={() => printContract(d)}>🖨️</button>
+                          <button className="btn-ghost" style={{ padding: '5px 10px', fontSize: '0.75rem' }} onClick={() => openEdit(d)}>✏️</button>
+                          <button className="btn-danger" style={{ padding: '5px 10px', fontSize: '0.75rem' }} onClick={() => handleDelete(d.id)}>🗑️</button>
+                        </div>
+                      </td>
                     </tr>
                   )
                 })}
@@ -161,7 +201,7 @@ ${c.clauses ? `<h2>Article 7 — Clauses particulieres</h2><div class="article">
       {showModal && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowModal(false)}>
           <div className="modal-box" style={{ maxWidth: 600 }}>
-            <div className="modal-title">📝 Generer un contrat</div>
+            <div className="modal-title">{editing ? '✏️ Modifier le contrat' : '📝 Générer un contrat'}</div>
             <form onSubmit={handleSave}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div className="hub-form-group" style={{ gridColumn: '1/-1' }}>
@@ -199,7 +239,7 @@ ${c.clauses ? `<h2>Article 7 — Clauses particulieres</h2><div class="article">
               </div>
               <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', marginTop: 8 }}>
                 <button type="button" className="btn-ghost" onClick={() => setShowModal(false)}>Annuler</button>
-                <button type="submit" className="btn-primary" disabled={saving}>{saving ? '...' : 'Generer le contrat'}</button>
+                <button type="submit" className="btn-primary" disabled={saving}>{saving ? '...' : editing ? 'Mettre à jour' : 'Générer le contrat'}</button>
               </div>
             </form>
           </div>
