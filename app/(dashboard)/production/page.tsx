@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/client'
 import Link from 'next/link'
 import type { Product } from '@/types'
 import { useToast } from '@/components/ui/Toast'
+import { computeYieldPct, yieldBadgeClass, yieldLabel } from '@/lib/production/yield'
 
 const statusConfig: Record<string, { label: string; badge: string; icon: string }> = {
   draft: { label: 'Brouillon', badge: 'badge-gray', icon: '✏️' },
@@ -113,10 +114,13 @@ export default function ProductionPage() {
             <div style={{ background: 'white', borderRadius: 12, border: '1px solid #e8e4db', overflow: 'hidden' }}>
               {loading ? <div style={{ padding: 48, textAlign: 'center', color: '#999' }}>Chargement...</div> : (
                 <table className="hub-table">
-                  <thead><tr><th>N° ordre</th><th>Recette</th><th>Produit fini</th><th>Quantité</th><th>Statut</th><th></th></tr></thead>
+                  <thead><tr><th>N° ordre</th><th>Recette</th><th>Produit fini</th><th>Quantité</th><th>Statut</th><th>Rendement</th><th></th></tr></thead>
                   <tbody>
                     {orders.map(o => {
                       const cfg = statusConfig[o.status] || statusConfig.draft
+                      const pct = o.actual_output_quantity != null
+                        ? computeYieldPct(Number(o.actual_output_quantity), Number(o.quantity))
+                        : null
                       return (
                         <tr key={o.id}>
                           <td><Link href={`/production/${o.id}`} style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--hub-green-mid)', textDecoration: 'none' }}>{o.order_number}</Link></td>
@@ -124,11 +128,14 @@ export default function ProductionPage() {
                           <td style={{ fontWeight: 600 }}>{o.product?.name || '—'}</td>
                           <td>{o.quantity} {o.product?.unit || ''}</td>
                           <td><span className={`badge ${cfg.badge}`}>{cfg.icon} {cfg.label}</span></td>
+                          <td>{pct != null
+                            ? <span className={`badge ${yieldBadgeClass(pct)}`} title={yieldLabel(pct)}>{pct} %</span>
+                            : <span style={{ color: '#bbb' }}>—</span>}</td>
                           <td><Link href={`/production/${o.id}`} className="btn-ghost" style={{ padding: '5px 10px', fontSize: '0.75rem', textDecoration: 'none' }}>Voir</Link></td>
                         </tr>
                       )
                     })}
-                    {orders.length === 0 && <tr><td colSpan={6} style={{ textAlign: 'center', padding: 48, color: '#999' }}>Aucun ordre — créez une recette puis lancez une production</td></tr>}
+                    {orders.length === 0 && <tr><td colSpan={7} style={{ textAlign: 'center', padding: 48, color: '#999' }}>Aucun ordre — créez une recette puis lancez une production</td></tr>}
                   </tbody>
                 </table>
               )}

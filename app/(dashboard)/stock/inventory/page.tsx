@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { useToast } from '@/components/ui/Toast'
 import { buildInventorySnapshot } from '@/lib/stock/units'
+import { isBlindSession } from '@/lib/stock/inventoryBlind'
 import { useRouter } from 'next/navigation'
 
 const statusConfig: Record<string, { label: string; badge: string; icon: string }> = {
@@ -16,6 +17,8 @@ export default function InventoryListPage() {
   const [sessions, setSessions] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [starting, setStarting] = useState(false)
+  const [blind, setBlind] = useState(false)
+  const [errorMsg, setErrorMsg] = useState('')
   const supabase = createClient()
   const { toast } = useToast()
   const router = useRouter()
@@ -31,6 +34,7 @@ export default function InventoryListPage() {
 
   async function startCount() {
     setStarting(true)
+    setErrorMsg('')
     const [{ data: products }, { data: batches }, { data: userData }, { data: num }] = await Promise.all([
       supabase.from('products').select('id, name, quantity, unit').order('name'),
       supabase.from('product_batches').select('id, product_id, batch_number, quantity, quality_status'),
@@ -47,9 +51,14 @@ export default function InventoryListPage() {
       session_number: num as string,
       status: 'draft',
       created_by: userData.user?.id,
+      blind,
+      started_at: new Date().toISOString(),
+      counted_by: blind ? userData.user?.id : null,
     }).select('id').single()
     if (error || !session) {
-      toast('error', error?.message || 'Erreur')
+      const msg = error?.message || 'Erreur lors de la création de la séance'
+      setErrorMsg(msg)
+      toast('error', msg)
       setStarting(false)
       return
     }
@@ -61,13 +70,14 @@ export default function InventoryListPage() {
       batch_number: line.batch_number,
       unit: line.unit,
       theoretical: line.theoretical,
-      counted: line.theoretical,
-      entry_quantity: line.theoretical,
+      // Aveugle : chaque ligne démarre vide (rien n'est pré-rempli avec le théorique).
+      counted: blind ? 0 : line.theoretical,
+      entry_quantity: blind ? null : line.theoretical,
       entry_unit: line.unit,
       sort_order: idx,
     })))
     setStarting(false)
-    if (linesError) { toast('error', linesError.message); return }
+    if (linesError) { setErrorMsg(linesError.message); toast('error', linesError.message); return }
     router.push(`/stock/inventory/${session.id}`)
   }
 
@@ -84,6 +94,25 @@ export default function InventoryListPage() {
         <p style={{ color: '#666', marginBottom: 20, maxWidth: 720, fontSize: '0.9rem' }}>
           Comptez chaque lot (et le hors-lot). L’écart corrige le stock à la validation.
         </p>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 14, flexWrap: 'wrap' }}>
+          <label
+            style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: '0.9rem', userSelect: 'none' }}
+            title="Comptage à l'aveugle : les quantités théoriques restent masquées pendant le comptage. Chaque ligne démarre vide et les écarts ne sont visibles qu'après l'action « Afficher les écarts » (manager)."
+          >
+            <input type="checkbox" checked={blind} onChange={e => setBlind(e.target.checked)} />
+            🎭 Comptage à l’aveugle
+          </label>
+          {blind && (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: '#fff7ed', border: '1px solid #fed7aa', color: '#92400e', borderRadius: 10, padding: '6px 12px', fontSize: '0.8rem', fontWeight: 700 }}>
+              🔒 Comptage à l’aveugle — valeurs théoriques masquées
+            </span>
+          )}
+        </div>
+        {errorMsg && (
+          <p style={{ color: '#b91c1c', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '10px 14px', marginBottom: 14, fontSize: '0.85rem' }}>
+            {errorMsg}
+          </p>
+        )}
         <div style={{ background: 'white', borderRadius: 12, border: '1px solid #e8e4db', overflow: 'hidden' }}>
           {loading ? <div style={{ padding: 48, textAlign: 'center', color: '#999' }}>Chargement...</div> : (
             <table className="hub-table">
@@ -93,7 +122,7 @@ export default function InventoryListPage() {
                   const cfg = statusConfig[s.status] || statusConfig.draft
                   return (
                     <tr key={s.id}>
-                      <td style={{ fontFamily: 'monospace', fontWeight: 700 }}>{s.session_number}</td>
+                      <td style={{ fontFamily: 'monospace', fontWeight: 700 }}>{s.session_number}{isBlindSession(s) ? ' 🔒' : ''}</td>
                       <td style={{ color: '#666', fontSize: '0.85rem' }}>{new Date(s.created_at).toLocaleDateString('fr-FR')}</td>
                       <td><span className={`badge ${cfg.badge}`}>{cfg.icon} {cfg.label}</span></td>
                       <td><Link href={`/stock/inventory/${s.id}`} className="btn-ghost" style={{ padding: '5px 10px', fontSize: '0.75rem', textDecoration: 'none' }}>Voir</Link></td>

@@ -20,6 +20,7 @@ const nav: { section: string; items: NavItem[]; roles?: UserRole[] }[] = [
     section: 'Principal',
     items: [
       { href: '/dashboard', icon: '📊', label: 'Tableau de bord' },
+      { href: '/me/conges', icon: '🏖', label: 'Mes congés' },
       { href: '/reports', icon: '📈', label: 'Rapports', roles: ['ceo', 'manager', 'admin'] },
     ]
   },
@@ -32,9 +33,11 @@ const nav: { section: string; items: NavItem[]; roles?: UserRole[] }[] = [
       { href: '/purchases', icon: '🛒', label: 'Achats & réception' },
       { href: '/production', icon: '🏭', label: 'Production' },
       { href: '/stock', icon: '📦', label: 'Gestion de Stock' },
+      { href: '/stock/warehouses', icon: '🏬', label: 'Entrepôts' },
       { href: '/stock/inventory', icon: '📋', label: 'Inventaire' },
       { href: '/stock/recall', icon: '🔎', label: 'Traçabilité lots' },
       { href: '/quality', icon: '🧪', label: 'Qualité' },
+      { href: '/portal-orders', icon: '🛍️', label: 'Commandes portail', roles: ['ceo', 'manager', 'admin'] },
       { href: '/clients', icon: '👥', label: 'Clients & Partenaires' },
     ]
   },

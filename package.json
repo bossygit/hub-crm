@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test": "node --experimental-strip-types --test lib/reports/revenue.test.ts lib/stock/stockExit.test.ts lib/auth/access.test.ts lib/stock/traceability.test.ts lib/purchases/receipt.test.ts lib/production/bom.test.ts lib/quality/release.test.ts lib/stock/units.test.ts"
+    "test": "node --experimental-strip-types --test lib/reports/revenue.test.ts lib/reports/journal.test.ts lib/reports/csv.test.ts lib/stock/stockExit.test.ts lib/auth/access.test.ts lib/stock/traceability.test.ts lib/purchases/receipt.test.ts lib/production/bom.test.ts lib/quality/release.test.ts lib/stock/units.test.ts lib/stock/warehouses.test.ts lib/stock/inventoryBlind.test.ts lib/quality/coa.test.ts lib/production/yield.test.ts lib/purchases/payments.test.ts lib/clients/finance.test.ts lib/reports/ledger.test.ts lib/portal/catalog.test.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.4.0",

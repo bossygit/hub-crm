@@ -13,10 +13,10 @@ Système de gestion intégré pour **HUB Distribution**, entreprise de transform
 | **Qualité** | Quarantaine, libération et rebut des lots |
 | **Inventaire** | Comptage physique par lot, conditionnements (sac/carton) |
 | **Gestion de Stock** | Produits, lots, entrées/sorties, alertes stock bas |
-| **Documents** | Génération & gestion de documents (factures, attestations, BL...) |
-| **Recrutement** | Offres d'emploi + suivi des candidatures |
-| **Demandes Externes** | Traitement des demandes de documents (DGI, assurances, etc.) |
-| **Portail Public** | Interface externe pour partenaires et candidats |
+| **Documents** | Registre de documents généraux avec PDF officiel (lettres, notes de service, PV…) |
+| **Recrutement** | Offres d'emploi + suivi des candidatures + CV uploadés |
+| **Demandes Externes** | Traitement des demandes de documents (DGI, assurances, etc.) + renvoi par email |
+| **Portail Public** | Catalogue produits, commandes, demandes de documents, candidatures |
 
 ## 🚀 Déploiement rapide
 
@@ -30,7 +30,14 @@ Créer `.env.local` à la racine :
 ```env
 NEXT_PUBLIC_SUPABASE_URL=https://xxxxx.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJxxxx...
+# Optionnel — nécessaire pour lier un employé à un compte (page Employés)
+SUPABASE_SERVICE_ROLE_KEY=eyJ...votre-service-role-key
+# Optionnel — emails (Resend) : notifications + renvoi de fichiers aux demandeurs
+RESEND_API_KEY=re_votre-cle-resend
 ```
+
+> **Migrations** : après `supabase-schema.sql`, exécuter aussi les patches `supabase/fix-*.sql`
+> dans l'ordre indiqué dans `GUIDE-MODULES.md` (migrations 1-14 puis patches audit 15-27).
 
 ### 3. Déployer sur Vercel
 1. Importer le repo GitHub sur [vercel.com](https://vercel.com)

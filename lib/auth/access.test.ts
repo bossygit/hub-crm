@@ -21,10 +21,22 @@ describe('homeForRole', () => {
 })
 
 describe('isPublicPath', () => {
-  it('allows login and portal without a session', () => {
+  it('allows login, portal and password-reset routes without a session', () => {
     assert.equal(isPublicPath('/login'), true)
     assert.equal(isPublicPath('/portal'), true)
     assert.equal(isPublicPath('/portal/jobs'), true)
+  })
+
+  it('treats the password-reset flow as public', () => {
+    assert.equal(isPublicPath('/forgot-password'), true)
+    assert.equal(isPublicPath('/forgot-password/'), true)
+    assert.equal(isPublicPath('/reset-password'), true)
+    assert.equal(isPublicPath('/reset-password/'), true)
+  })
+
+  it('does not treat lookalike routes as public', () => {
+    assert.equal(isPublicPath('/forgot-password-extra'), false)
+    assert.equal(isPublicPath('/reset-password-extra'), false)
   })
 
   it('does not treat /register as public', () => {

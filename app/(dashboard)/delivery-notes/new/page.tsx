@@ -12,10 +12,25 @@ const UNITS = ['kg', 'g', 'L', 'ml', 'carton', 'sac', 'pièce', 'heure', 'forfai
 interface LineItem { product_id: string | null; batch_id: string | null; name: string; description: string; quantity: number; unit: string; unit_price: number }
 const emptyLine = (): LineItem => ({ product_id: null, batch_id: null, name: '', description: '', quantity: 1, unit: 'kg', unit_price: 0 })
 
+/** Reste à livrer par produit (facture liée) : total facturé − déjà livré − engagé par un autre BL. */
+interface InvoiceTotals {
+  product_id: string
+  name: string
+  unit: string
+  total: number
+  delivered: number
+  engaged: number
+  remaining: number
+}
+
+const round4 = (n: number) => Math.round(n * 1e4) / 1e4
+const fmt = (n: number) => Number(n || 0).toLocaleString('fr-FR', { maximumFractionDigits: 3 })
+
 export default function NewDeliveryNotePage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const invoiceId = searchParams.get('invoice_id')
+  const fromInvoice = !!invoiceId
 
   const [clients, setClients] = useState<Client[]>([])
   const [products, setProducts] = useState<Product[]>([])
@@ -25,6 +40,8 @@ export default function NewDeliveryNotePage() {
   const [showClientDropdown, setShowClientDropdown] = useState(false)
   const [form, setForm] = useState({ title: '', client_id: '', client_name: '', invoice_id: invoiceId || '', invoice_number: '', notes: '' })
   const [items, setItems] = useState<LineItem[]>([emptyLine()])
+  const [invTotals, setInvTotals] = useState<Record<string, InvoiceTotals>>({})
+  const [invLoadError, setInvLoadError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const supabase = createClient()
   const { toast } = useToast()
@@ -50,21 +67,126 @@ export default function NewDeliveryNotePage() {
         if (inv) {
           setForm(f => ({ ...f, client_id: inv.client_id || '', client_name: (inv.client as any)?.name || '', invoice_id: inv.id, invoice_number: inv.invoice_number, title: `BL — ${inv.invoice_number}` }))
           setClientSearch((inv.client as any)?.name || '')
-          if (invItems && invItems.length > 0) {
-            setItems(invItems.map((it: any) => ({ product_id: it.product_id || null, batch_id: it.batch_id || null, name: it.name, description: it.description || '', quantity: it.quantity, unit: it.unit || 'kg', unit_price: it.unit_price })))
+        }
+        if (!invItems || invItems.length === 0) {
+          setInvLoadError('Cette facture ne contient aucune ligne. Impossible de créer un bon de livraison.')
+          return
+        }
+
+        // ── Restant à livrer : BL existants (approuvés = livrés, en attente = engagés) ──
+        const totalsMap: Record<string, InvoiceTotals> = {}
+        for (const it of invItems as any[]) {
+          if (!it.product_id) continue
+          const t = totalsMap[it.product_id] || {
+            product_id: it.product_id, name: it.name, unit: it.unit || 'kg',
+            total: 0, delivered: 0, engaged: 0, remaining: 0,
+          }
+          t.total += Number(it.quantity) || 0
+          totalsMap[it.product_id] = t
+        }
+        const { data: existing } = await supabase
+          .from('documents').select('id, status')
+          .eq('type', 'bon_livraison').eq('invoice_id', invoiceId)
+          .in('status', ['pending', 'approved'])
+        const ids = (existing || []).map((d: any) => d.id)
+        if (ids.length > 0) {
+          const statusById = new Map((existing || []).map((d: any) => [d.id, d.status]))
+          const { data: blLines } = await supabase
+            .from('document_items').select('document_id, product_id, quantity')
+            .in('document_id', ids)
+          for (const line of (blLines || []) as any[]) {
+            if (!line.product_id) continue
+            const t = totalsMap[line.product_id]
+            if (!t) continue
+            if (statusById.get(line.document_id) === 'approved') t.delivered += Number(line.quantity) || 0
+            else if (statusById.get(line.document_id) === 'pending') t.engaged += Number(line.quantity) || 0
           }
         }
+        for (const pid of Object.keys(totalsMap)) {
+          const t = totalsMap[pid]
+          t.remaining = round4(Math.max(0, t.total - t.delivered - t.engaged))
+        }
+        setInvTotals(totalsMap)
+
+        // ── Pré-remplissage des lignes, plafonnées au restant (par pool produit) ──
+        const pool: Record<string, number> = {}
+        for (const pid of Object.keys(totalsMap)) pool[pid] = totalsMap[pid].remaining
+        const lines: LineItem[] = (invItems as any[]).map((it: any) => {
+          let qty = Number(it.quantity) || 0
+          if (it.product_id && pool[it.product_id] !== undefined) {
+            qty = round4(Math.max(0, Math.min(qty, pool[it.product_id])))
+            pool[it.product_id] -= qty
+          }
+          return {
+            product_id: it.product_id || null,
+            batch_id: it.batch_id || suggestFefoBatch(b || [], it.product_id),
+            name: it.name,
+            description: it.description || '',
+            quantity: qty,
+            unit: it.unit || 'kg',
+            unit_price: it.unit_price || 0,
+          }
+        })
+        setItems(lines)
       }
     }
     init()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [invoiceId])
 
+  /** Plafond de saisie d'une ligne en mode facture : restant − déjà demandé par les autres lignes du BL. */
+  function lineCap(idx: number): number {
+    if (!fromInvoice) return Infinity
+    const it = items[idx]
+    if (!it.product_id) return Infinity
+    const t = invTotals[it.product_id]
+    if (!t) return Infinity
+    const others = items.reduce((sum, l, i) =>
+      i !== idx && l.product_id === it.product_id ? sum + (Number(l.quantity) || 0) : sum, 0)
+    return round4(Math.max(0, t.remaining - others))
+  }
+
+  function enforceInvoiceLimits(): string | null {
+    if (!fromInvoice) return null
+    const request: Record<string, number> = {}
+    for (const it of items) {
+      if (it.product_id && Number(it.quantity) > 0) request[it.product_id] = (request[it.product_id] || 0) + Number(it.quantity)
+    }
+    for (const pid of Object.keys(request)) {
+      const t = invTotals[pid]
+      if (!t) continue
+      if (request[pid] - t.remaining > 0.0001) {
+        return `Quantité dépassée pour « ${t.name} » : déjà livré ${fmt(t.delivered)} ${t.unit}${t.engaged > 0 ? `, ${fmt(t.engaged)} ${t.unit} engagés par un autre BL` : ''} — restant ${fmt(t.remaining)} ${t.unit}.`
+      }
+    }
+    return null
+  }
+
   async function handleSave(targetStatus: 'draft' | 'pending') {
+    if (fromInvoice && items.every(it => !it.product_id && !it.name.trim())) {
+      toast('warning', 'Aucune ligne à enregistrer pour cette facture.'); return
+    }
     const validItems = items.filter(it => it.name.trim() && it.quantity > 0).map(it => {
       const p = products.find(x => x.id === it.product_id)
       return lineInBaseUnit(it, p?.unit, packsForProduct(it.product_id, packRows))
     })
     if (validItems.length === 0) { toast('warning', 'Ajoutez au moins une ligne.'); return }
+
+    // Garde restant-à-livrer (facture liée) : cumul des BL > quantité facturée → blocage net.
+    const limitMsg = enforceInvoiceLimits()
+    if (limitMsg) { toast('error', limitMsg); return }
+
+    // BL autonome : alerte précoce si le stock disponible est insuffisant (la validation bloquera aussi).
+    if (!fromInvoice) {
+      const short: string[] = []
+      for (const it of validItems as { product_id: string | null; quantity: number; name: string }[]) {
+        if (!it.product_id) continue
+        const p = products.find(x => x.id === it.product_id)
+        if (p && Number(p.quantity) < Number(it.quantity)) short.push(`« ${p.name} » (dispo ${fmt(Number(p.quantity))} ${p.unit || ''})`)
+      }
+      if (short.length > 0) toast('warning', 'Attention, stock insuffisant : ' + short.join(', '))
+    }
+
     setSaving(true)
     try {
       const { data: userData } = await supabase.auth.getUser()
@@ -80,9 +202,14 @@ export default function NewDeliveryNotePage() {
         created_by: userData.user?.id,
       }).select('id').single()
       if (error || !doc) throw new Error(error?.message || 'Erreur')
-      await supabase.from('document_items').insert(
+      const { error: itemsError } = await supabase.from('document_items').insert(
         validItems.map((it, idx) => ({ ...it, document_id: doc.id, sort_order: idx, batch_id: it.batch_id || null }))
       )
+      if (itemsError) {
+        // Nettoyage : pas de document orphelin si les lignes échouent.
+        await supabase.from('documents').delete().eq('id', doc.id)
+        throw new Error(itemsError.message || 'Erreur insertion lignes')
+      }
 
       if (targetStatus === 'pending') {
         try {
@@ -111,7 +238,12 @@ export default function NewDeliveryNotePage() {
   function updateItem(idx: number, field: keyof LineItem, value: string | number | null) {
     setItems(prev => {
       const u = [...prev]; u[idx] = { ...u[idx], [field]: value }
-      if (field === 'product_id' && value) {
+      if (field === 'quantity' && fromInvoice) {
+        const cap = lineCap(idx)
+        const q = Number(value) || 0
+        if (Number.isFinite(cap) && q > cap) u[idx].quantity = round4(cap)
+      }
+      if (field === 'product_id' && value && !fromInvoice) {
         const p = products.find(pr => pr.id === value)
         if (p) { u[idx].name = p.name; u[idx].unit_price = p.price_per_unit || 0; u[idx].unit = p.unit || 'kg' }
         u[idx].batch_id = suggestFefoBatch(batches, String(value))
@@ -123,6 +255,7 @@ export default function NewDeliveryNotePage() {
   function addLine() { setItems(prev => [...prev, emptyLine()]) }
   function removeLine(idx: number) { if (items.length > 1) setItems(prev => prev.filter((_, i) => i !== idx)) }
   const filteredClients = clients.filter(c => c.name.toLowerCase().includes(clientSearch.toLowerCase()))
+  const totalRemainingProducts = Object.values(invTotals).filter(t => t.remaining > 0)
 
   return (
     <div className="invoice-page invoice-page--new">
@@ -131,10 +264,11 @@ export default function NewDeliveryNotePage() {
           <button type="button" onClick={() => router.back()} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.2rem', color: 'var(--hub-green)' }}>←</button>
           <h2>🚚 Nouveau Bon de Livraison</h2>
           {form.invoice_number && <span className="badge badge-blue">📎 {form.invoice_number}</span>}
+          {fromInvoice && <span className="badge badge-gray">🔒 Lignes liées à la facture</span>}
         </div>
         <div style={{ display: 'flex', gap: 12 }}>
           <button type="button" className="btn-ghost" onClick={() => handleSave('draft')} disabled={saving}>💾 Brouillon</button>
-          <button type="button" className="btn-amber" onClick={() => handleSave('pending')} disabled={saving}>📤 Préparer livraison</button>
+          <button type="button" className="btn-amber" onClick={() => handleSave('pending')} disabled={saving}>{saving ? '⏳...' : '📤 Préparer livraison'}</button>
         </div>
       </div>
 
@@ -151,19 +285,30 @@ export default function NewDeliveryNotePage() {
                 </div>
                 <div className="hub-form-group">
                   <label className="invoice-field__label">Facture liée</label>
-                  <input className="hub-input" value={form.invoice_number} readOnly style={{ background: '#f8f5ee', fontFamily: 'monospace' }} placeholder="Aucune" />
+                  <input className="hub-input" value={form.invoice_number || 'Aucune (BL autonome)'} readOnly style={{ background: '#f8f5ee', fontFamily: 'monospace' }} />
                 </div>
               </div>
+              {fromInvoice && totalRemainingProducts.length === 0 && (
+                <div style={{ marginTop: 14, padding: '12px 14px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, fontSize: '0.85rem', color: '#92400e' }}>
+                  ⚠️ Cette facture semble déjà entièrement livrée (ou couverte par des BL en attente). Réduisez les quantités à 0 ou supprimez les lignes avant d’enregistrer.
+                </div>
+              )}
+              {fromInvoice && totalRemainingProducts.length > 0 && (
+                <div style={{ marginTop: 14, padding: '12px 14px', background: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: 8, fontSize: '0.82rem', color: '#065f46' }}>
+                  <strong>Reste à livrer sur cette facture :</strong>{' '}
+                  {totalRemainingProducts.map(t => `${t.name}: ${fmt(t.remaining)} ${t.unit}`).join(' · ')}
+                </div>
+              )}
             </div>
 
             {/* Client */}
             <div style={{ background: 'white', borderRadius: 12, border: '1px solid #e8e4db', padding: '24px' }}>
               <div style={{ fontWeight: 700, color: 'var(--hub-green)', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 16, paddingBottom: 8, borderBottom: '2px solid var(--hub-amber)' }}>👥 Client / Destinataire</div>
               <div style={{ position: 'relative' }}>
-                <input className="hub-input" placeholder="🔍 Rechercher un client..." value={clientSearch}
+                <input className="hub-input" placeholder="🔍 Rechercher un client..." value={clientSearch} readOnly={fromInvoice}
                   onChange={e => { setClientSearch(e.target.value); setShowClientDropdown(true) }}
-                  onFocus={() => setShowClientDropdown(true)} onBlur={() => setTimeout(() => setShowClientDropdown(false), 200)} />
-                {showClientDropdown && filteredClients.length > 0 && (
+                  onFocus={() => { if (!fromInvoice) setShowClientDropdown(true) }} onBlur={() => setTimeout(() => setShowClientDropdown(false), 200)} />
+                {!fromInvoice && showClientDropdown && filteredClients.length > 0 && (
                   <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: 'white', border: '1.5px solid var(--hub-green-mid)', borderRadius: '0 0 10px 10px', zIndex: 50, maxHeight: 220, overflowY: 'auto', boxShadow: '0 8px 24px rgba(0,0,0,0.12)' }}>
                     {filteredClients.map(c => (
                       <div key={c.id} onMouseDown={() => selectClient(c)} style={{ padding: '10px 16px', cursor: 'pointer', borderBottom: '1px solid #f0ece4' }}
@@ -178,7 +323,7 @@ export default function NewDeliveryNotePage() {
               {form.client_id && (
                 <div style={{ marginTop: 10, padding: '10px 14px', background: '#ecfdf5', borderRadius: 8, border: '1px solid #a7f3d0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span>✅ <strong>{form.client_name}</strong></span>
-                  <button type="button" onClick={() => { setForm(f => ({ ...f, client_id: '', client_name: '' })); setClientSearch('') }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#999' }}>✕</button>
+                  {!fromInvoice && <button type="button" onClick={() => { setForm(f => ({ ...f, client_id: '', client_name: '' })); setClientSearch('') }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#999' }}>✕</button>}
                 </div>
               )}
             </div>
@@ -187,44 +332,60 @@ export default function NewDeliveryNotePage() {
             <div style={{ background: 'white', borderRadius: 12, border: '1px solid #e8e4db', padding: '24px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, paddingBottom: 8, borderBottom: '2px solid var(--hub-amber)' }}>
                 <div style={{ fontWeight: 700, color: 'var(--hub-green)', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>📦 Articles à livrer</div>
-                <button type="button" className="btn-ghost" style={{ padding: '6px 14px', fontSize: '0.8rem' }} onClick={addLine}>+ Ajouter</button>
+                {!fromInvoice && <button type="button" className="btn-ghost" style={{ padding: '6px 14px', fontSize: '0.8rem' }} onClick={addLine}>+ Ajouter</button>}
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '2fr 1.5fr 1fr 1fr auto', gap: 8, marginBottom: 8 }}>
                 {['Produit', 'Description', 'Qté', 'Unité', ''].map(h => <div key={h} style={{ fontSize: '0.7rem', fontWeight: 700, color: '#999', textTransform: 'uppercase' }}>{h}</div>)}
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {items.map((item, idx) => (
-                  <div key={idx} style={{ display: 'grid', gridTemplateColumns: '2fr 1.5fr 1fr 1fr auto', gap: 8, background: '#fafaf7', borderRadius: 8, padding: '10px', alignItems: 'flex-start' }}>
-                    <div>
-                      <select className="hub-select" value={item.product_id || ''} onChange={e => updateItem(idx, 'product_id', e.target.value || null)}>
-                        <option value="">— Produit —</option>
-                        {products.map(p => <option key={p.id} value={p.id}>{p.name} ({p.unit})</option>)}
-                      </select>
-                      <input className="hub-input" style={{ marginTop: 4 }} placeholder="Nom..." value={item.name} onChange={e => updateItem(idx, 'name', e.target.value)} />
-                      {item.product_id && (
-                        <select className="hub-select" style={{ marginTop: 4 }} value={item.batch_id || ''} onChange={e => updateItem(idx, 'batch_id', e.target.value || null)}>
-                          <option value="">— Lot (optionnel) —</option>
-                          {batches.filter(b => b.product_id === item.product_id && isLotUsable(b)).map(b => (
-                            <option key={b.id} value={b.id}>
-                              {b.batch_number} · {b.quantity}
-                              {b.expiry_date ? ` · exp. ${new Date(b.expiry_date).toLocaleDateString('fr-FR')}` : ''}
-                            </option>
-                          ))}
+                {items.map((item, idx) => {
+                  const cap = lineCap(idx)
+                  const over = fromInvoice && item.product_id ? (Number(item.quantity) || 0) - cap > 0.0001 : false
+                  const t = item.product_id ? invTotals[item.product_id] : undefined
+                  return (
+                    <div key={idx} style={{ display: 'grid', gridTemplateColumns: '2fr 1.5fr 1fr 1fr auto', gap: 8, background: '#fafaf7', borderRadius: 8, padding: '10px', alignItems: 'flex-start' }}>
+                      <div>
+                        <select className="hub-select" value={item.product_id || ''} disabled={fromInvoice}
+                          onChange={e => updateItem(idx, 'product_id', e.target.value || null)}>
+                          <option value="">— Produit —</option>
+                          {products.map(p => <option key={p.id} value={p.id}>{p.name} ({p.unit})</option>)}
                         </select>
-                      )}
+                        <input className="hub-input" style={{ marginTop: 4 }} placeholder="Nom..." value={item.name} onChange={e => updateItem(idx, 'name', e.target.value)} />
+                        {item.product_id && (
+                          <select className="hub-select" style={{ marginTop: 4 }} value={item.batch_id || ''} onChange={e => updateItem(idx, 'batch_id', e.target.value || null)}>
+                            <option value="">— Lot (optionnel) —</option>
+                            {batches.filter(b => b.product_id === item.product_id && isLotUsable(b)).map(b => (
+                              <option key={b.id} value={b.id}>
+                                {b.batch_number} · {b.quantity}
+                                {b.expiry_date ? ` · exp. ${new Date(b.expiry_date).toLocaleDateString('fr-FR')}` : ''}
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                      </div>
+                      <input className="hub-input" placeholder="Description..." value={item.description} onChange={e => updateItem(idx, 'description', e.target.value)} />
+                      <div>
+                        <input className="hub-input" type="number" min={0} step="0.01" value={item.quantity}
+                          max={Number.isFinite(cap) ? cap : undefined}
+                          onChange={e => updateItem(idx, 'quantity', parseFloat(e.target.value) || 0)} />
+                        {fromInvoice && t && (
+                          <div style={{ fontSize: '0.68rem', color: over ? '#dc2626' : '#065f46', marginTop: 2 }}>
+                            {over ? '⚠️ dépasse le restant' : `restant ${fmt(t.remaining)} ${t.unit}`}
+                          </div>
+                        )}
+                      </div>
+                      <select className="hub-select" value={item.unit} onChange={e => updateItem(idx, 'unit', e.target.value)}>
+                        {(item.product_id
+                          ? unitsForProduct(products.find(p => p.id === item.product_id)?.unit || 'kg', packsForProduct(item.product_id, packRows))
+                          : UNITS
+                        ).map(u => <option key={u}>{u}</option>)}
+                      </select>
+                      <button type="button" onClick={() => removeLine(idx)} disabled={items.length === 1}
+                        title={fromInvoice ? 'Retirer cette ligne du BL' : 'Supprimer la ligne'}
+                        style={{ background: items.length === 1 ? '#f0ece4' : '#fee2e2', border: 'none', color: items.length === 1 ? '#ccc' : '#dc2626', borderRadius: 6, padding: '6px 10px', cursor: items.length === 1 ? 'not-allowed' : 'pointer' }}>✕</button>
                     </div>
-                    <input className="hub-input" placeholder="Description..." value={item.description} onChange={e => updateItem(idx, 'description', e.target.value)} />
-                    <input className="hub-input" type="number" min={0} step="0.01" value={item.quantity} onChange={e => updateItem(idx, 'quantity', parseFloat(e.target.value) || 0)} />
-                    <select className="hub-select" value={item.unit} onChange={e => updateItem(idx, 'unit', e.target.value)}>
-                      {(item.product_id
-                        ? unitsForProduct(products.find(p => p.id === item.product_id)?.unit || 'kg', packsForProduct(item.product_id, packRows))
-                        : UNITS
-                      ).map(u => <option key={u}>{u}</option>)}
-                    </select>
-                    <button type="button" onClick={() => removeLine(idx)} disabled={items.length === 1}
-                      style={{ background: items.length === 1 ? '#f0ece4' : '#fee2e2', border: 'none', color: items.length === 1 ? '#ccc' : '#dc2626', borderRadius: 6, padding: '6px 10px', cursor: items.length === 1 ? 'not-allowed' : 'pointer' }}>✕</button>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             </div>
 
@@ -251,8 +412,10 @@ export default function NewDeliveryNotePage() {
                 <button type="button" className="btn-ghost" style={{ justifyContent: 'center', padding: '11px' }} onClick={() => handleSave('draft')} disabled={saving}>{saving ? '⏳...' : '💾 Brouillon'}</button>
                 <button type="button" className="btn-amber" style={{ justifyContent: 'center', padding: '11px' }} onClick={() => handleSave('pending')} disabled={saving}>{saving ? '⏳...' : '📤 Préparer livraison'}</button>
               </div>
-              <div style={{ marginTop: 12, padding: '8px 10px', background: '#f8f5ee', borderRadius: 6, fontSize: '0.72rem', color: '#666' }}>
-                ℹ️ La validation du BL (livraison confirmée) décrémentera automatiquement le stock.
+              <div style={{ marginTop: 12, padding: '8px 10px', background: '#f8f5ee', borderRadius: 6, fontSize: '0.72rem', color: '#666', lineHeight: 1.5 }}>
+                {fromInvoice
+                  ? 'ℹ️ BL lié à une facture : le stock a déjà été déduit à la validation de la facture. Valider ce BL n’effectue aucun mouvement de stock.'
+                  : 'ℹ️ BL autonome : la validation (livraison confirmée) décrémentera le stock une seule fois.'}
               </div>
             </div>
           </div>

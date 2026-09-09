@@ -1,0 +1,1 @@
+-- inspection temporaire appliquee (placeholder vide, garde lhistorique CLI coherent)

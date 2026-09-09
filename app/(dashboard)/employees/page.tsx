@@ -10,7 +10,22 @@ const statusLabels: Record<string, string> = { actif: '● Actif', conge: '⏸ E
 const contractLabels: Record<string, string> = { cdi: 'CDI', cdd: 'CDD', stage: 'Stage', freelance: 'Freelance' }
 const departments = ['Direction', 'Commercial', 'Production', 'Qualité', 'Logistique', 'Finance', 'RH', 'Informatique', 'Autre']
 
-const emptyForm = { full_name: '', position: '', department: 'Commercial', email: '', phone: '', hire_date: '', contract_type: 'cdi' as const, salary: 0, status: 'actif' as const, address: '', notes: '', employee_number: '' }
+type EmployeeForm = {
+  full_name: string
+  position: string
+  department: string
+  email: string
+  phone: string
+  hire_date: string
+  contract_type: Employee['contract_type']
+  salary: number
+  status: Employee['status']
+  address: string
+  notes: string
+  employee_number: string
+}
+
+const emptyForm: EmployeeForm = { full_name: '', position: '', department: 'Commercial', email: '', phone: '', hire_date: '', contract_type: 'cdi', salary: 0, status: 'actif', address: '', notes: '', employee_number: '' }
 
 export default function EmployeesPage() {
   const [employees, setEmployees] = useState<Employee[]>([])
@@ -25,6 +40,13 @@ export default function EmployeesPage() {
   const [showDocModal, setShowDocModal] = useState(false)
   const [docForm, setDocForm] = useState({ type: 'contrat', title: '', issued_date: new Date().toISOString().split('T')[0] })
   const [leaveBalance, setLeaveBalance] = useState<any>(null)
+  // Liaison employé <-> compte utilisateur (espace « Mes congés »)
+  const [ficheLinkUser, setFicheLinkUser] = useState<{ id: string; email?: string | null } | null>(null)
+  const [linkInfo, setLinkInfo] = useState<{ id: string; email?: string | null } | null>(null)
+  const [linkEmail, setLinkEmail] = useState('')
+  const [linking, setLinking] = useState(false)
+  const [linkMsg, setLinkMsg] = useState<{ kind: 'error' | 'success'; text: string } | null>(null)
+  const [serviceRoleConfigured, setServiceRoleConfigured] = useState(true)
   const supabase = createClient()
   const { toast } = useToast()
 
@@ -47,13 +69,88 @@ export default function EmployeesPage() {
     if (lbRes.error) toast('error', 'Erreur chargement solde congés.')
     setEmpDocs(docsRes.data || [])
     setLeaveBalance(lbRes.data)
+    // Infos du compte auth lié (best-effort, GET réservé RH)
+    setFicheLinkUser(null)
+    fetch(`/api/admin/link-employee?employee_id=${encodeURIComponent(empId)}`)
+      .then(r => r.json())
+      .then(j => { if (j?.ok && j.linkedUser) setFicheLinkUser(j.linkedUser) })
+      .catch(() => { /* best-effort */ })
   }
 
-  function openNew() { setEditing(null); setForm(emptyForm); setShowModal(true) }
+  async function loadLinkInfo(empId: string) {
+    setLinkInfo(null); setLinkMsg(null); setLinkEmail('')
+    try {
+      const res = await fetch(`/api/admin/link-employee?employee_id=${encodeURIComponent(empId)}`)
+      const j = await res.json()
+      if (res.ok && j?.ok) {
+        setServiceRoleConfigured(!!j.serviceRoleConfigured)
+        if (j.linkedUser) setLinkInfo(j.linkedUser)
+      }
+    } catch { /* best-effort */ }
+  }
+
+  function refreshEmployeeUser(empId: string, userId: string | null) {
+    setEmployees(prev => prev.map(e => (e.id === empId ? { ...e, user_id: userId || undefined } : e)))
+    setSelected(prev => (prev && prev.id === empId ? { ...prev, user_id: userId || undefined } : prev))
+    setEditing(prev => (prev && prev.id === empId ? { ...prev, user_id: userId || undefined } : prev))
+  }
+
+  async function linkAccount() {
+    if (!editing) return
+    const email = linkEmail.trim()
+    if (!email) { setLinkMsg({ kind: 'error', text: 'Saisissez l’adresse e-mail du compte à lier.' }); return }
+    setLinking(true); setLinkMsg(null)
+    try {
+      const res = await fetch('/api/admin/link-employee', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ employee_id: editing.id, email }),
+      })
+      const j = await res.json()
+      if (!res.ok || !j?.ok) { setLinkMsg({ kind: 'error', text: j?.error || 'Échec de la liaison du compte.' }); return }
+      setLinkInfo({ id: j.userId, email: j.email })
+      setLinkMsg({ kind: 'success', text: j.message || 'Compte lié.' })
+      setLinkEmail('')
+      refreshEmployeeUser(editing.id, j.userId)
+    } catch {
+      setLinkMsg({ kind: 'error', text: 'Erreur réseau : liaison impossible.' })
+    } finally {
+      setLinking(false)
+    }
+  }
+
+  async function unlinkAccount() {
+    if (!editing) return
+    if (!confirm('Dissocier ce compte utilisateur de la fiche employé ?')) return
+    setLinking(true); setLinkMsg(null)
+    try {
+      const res = await fetch('/api/admin/link-employee', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ employee_id: editing.id, unlink: true }),
+      })
+      const j = await res.json()
+      if (!res.ok || !j?.ok) { setLinkMsg({ kind: 'error', text: j?.error || 'Échec de la dissociation.' }); return }
+      setLinkInfo(null); setLinkEmail('')
+      setLinkMsg({ kind: 'success', text: 'Compte dissocié de la fiche.' })
+      refreshEmployeeUser(editing.id, null)
+    } catch {
+      setLinkMsg({ kind: 'error', text: 'Erreur réseau : dissociation impossible.' })
+    } finally {
+      setLinking(false)
+    }
+  }
+
+  function openNew() {
+    setEditing(null); setForm(emptyForm); setShowModal(true)
+    setLinkInfo(null); setLinkEmail(''); setLinkMsg(null)
+  }
+
   function openEdit(emp: Employee) {
     setEditing(emp)
     setForm({ full_name: emp.full_name, position: emp.position, department: emp.department, email: emp.email || '', phone: emp.phone || '', hire_date: emp.hire_date, contract_type: emp.contract_type, salary: emp.salary || 0, status: emp.status, address: emp.address || '', notes: emp.notes || '', employee_number: emp.employee_number || '' })
     setShowModal(true)
+    void loadLinkInfo(emp.id)
   }
 
   async function handleSave(e: React.FormEvent) {
@@ -197,6 +294,30 @@ export default function EmployeesPage() {
                   </div>
                 </div>
 
+                {/* Compte utilisateur */}
+                <div style={{ borderTop: '1px solid #f0ece4', paddingTop: 12, marginBottom: 12 }}>
+                  <div style={{ fontWeight: 700, fontSize: '0.8rem', color: 'var(--hub-green)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>Compte utilisateur</div>
+                  {selected.user_id ? (
+                    <div style={{ padding: 10, background: '#ecfdf5', borderRadius: 8, display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <span>✅</span>
+                      <div style={{ flex: 1, fontSize: '0.8rem', minWidth: 0 }}>
+                        <div style={{ fontWeight: 600, color: '#065f46', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {ficheLinkUser?.email || `Compte lié (${selected.user_id.slice(0, 8)}…)`}
+                        </div>
+                        <div style={{ color: '#666', fontSize: '0.72rem' }}>L'employé peut soumettre ses congés dans « Mes congés ».</div>
+                      </div>
+                      <button className="btn-ghost" style={{ padding: '5px 10px', fontSize: '0.72rem', whiteSpace: 'nowrap' }} onClick={() => openEdit(selected)}>Gérer</button>
+                    </div>
+                  ) : (
+                    <div style={{ padding: 10, background: '#fef2f2', borderRadius: 8, fontSize: '0.8rem', color: '#991b1b' }}>
+                      <div>⚠ Aucun compte utilisateur lié — l'employé ne peut pas soumettre ses congés.</div>
+                      <div style={{ marginTop: 6 }}>
+                        <button className="btn-primary" style={{ padding: '5px 10px', fontSize: '0.72rem' }} onClick={() => openEdit(selected)}>Lier un compte</button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
                 {/* Solde conge */}
                 {leaveBalance && (
                   <div style={{ borderTop: '1px solid #f0ece4', paddingTop: 12, marginBottom: 12 }}>
@@ -273,7 +394,7 @@ export default function EmployeesPage() {
                 </div>
                 <div className="hub-form-group">
                   <label>Type de contrat</label>
-                  <select className="hub-select" value={form.contract_type} onChange={e => setForm({ ...form, contract_type: e.target.value as any })}>
+                  <select className="hub-select" value={form.contract_type} onChange={e => setForm({ ...form, contract_type: e.target.value as Employee['contract_type'] })}>
                     {Object.entries(contractLabels).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                   </select>
                 </div>
@@ -283,7 +404,7 @@ export default function EmployeesPage() {
                 </div>
                 <div className="hub-form-group">
                   <label>Statut</label>
-                  <select className="hub-select" value={form.status} onChange={e => setForm({ ...form, status: e.target.value as any })}>
+                  <select className="hub-select" value={form.status} onChange={e => setForm({ ...form, status: e.target.value as Employee['status'] })}>
                     {Object.entries(statusLabels).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                   </select>
                 </div>
@@ -296,6 +417,68 @@ export default function EmployeesPage() {
                   <textarea className="hub-input" rows={2} value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} style={{ resize: 'vertical' }} />
                 </div>
               </div>
+
+              {editing && (
+                <div style={{ borderTop: '1px solid #f0ece4', marginTop: 6, paddingTop: 14 }}>
+                  <div style={{ fontWeight: 700, fontSize: '0.8rem', color: 'var(--hub-green)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>
+                    🔗 Compte utilisateur (espace « Mes congés »)
+                  </div>
+
+                  {editing.user_id ? (
+                    <div style={{ background: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: 8, padding: '12px 14px' }}>
+                      <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#065f46' }}>
+                        ✅ Compte lié — {linkInfo?.email || `id ${editing.user_id.slice(0, 8)}…`}
+                      </div>
+                      <div style={{ fontSize: '0.75rem', color: '#666', margin: '4px 0 10px' }}>
+                        L'employé peut se connecter et soumettre ses demandes de congé dans « Mes congés ».
+                      </div>
+                      <button type="button" className="btn-ghost" style={{ padding: '6px 12px', fontSize: '0.78rem' }} disabled={linking} onClick={unlinkAccount}>
+                        {linking ? '...' : 'Délier le compte'}
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <div style={{ fontSize: '0.78rem', color: '#666', marginBottom: 8 }}>
+                        Relie la fiche à un compte existant (recherché par e-mail) ou envoie une invitation pour créer un compte salarié (rôle « employee »).
+                      </div>
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                        <input
+                          className="hub-input"
+                          type="email"
+                          placeholder="email@entreprise.com"
+                          value={linkEmail}
+                          onChange={e => setLinkEmail(e.target.value)}
+                          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); linkAccount() } }}
+                          style={{ flex: 1 }}
+                        />
+                        <button
+                          type="button"
+                          className="btn-primary"
+                          disabled={linking || !serviceRoleConfigured}
+                          onClick={linkAccount}
+                          style={{ whiteSpace: 'nowrap' }}
+                        >
+                          {linking ? '...' : 'Lier le compte'}
+                        </button>
+                      </div>
+                      {!serviceRoleConfigured && (
+                        <div style={{ fontSize: '0.75rem', color: '#991b1b', marginTop: 8, background: '#fef2f2', borderRadius: 6, padding: '8px 10px' }}>
+                          Liaison indisponible : la clé serveur <code>SUPABASE_SERVICE_ROLE_KEY</code> n'est pas configurée (nécessaire pour créer / retrouver le compte).
+                        </div>
+                      )}
+                    </>
+                  )}
+
+                  {linkMsg && (
+                    <div style={{ fontSize: '0.78rem', marginTop: 10, padding: '8px 10px', borderRadius: 6,
+                      background: linkMsg.kind === 'error' ? '#fef2f2' : '#ecfdf5',
+                      color: linkMsg.kind === 'error' ? '#991b1b' : '#065f46' }}>
+                      {linkMsg.text}
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', marginTop: 8 }}>
                 <button type="button" className="btn-ghost" onClick={() => setShowModal(false)}>Annuler</button>
                 <button type="submit" className="btn-primary" disabled={saving}>{saving ? 'Enregistrement...' : 'Enregistrer'}</button>

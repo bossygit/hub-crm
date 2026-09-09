@@ -266,7 +266,7 @@ Deux canaux complementaires :
 | **Documents** (`/documents`) | Documents generaux de l'entreprise |
 | **Demandes Externes** (`/requests`) | Demandes de documents par des tiers (DGI, assurances, banques) |
 | **Recrutement** (`/recruitment`) | Offres d'emploi et suivi des candidatures |
-| **Rapports** (`/reports`) | KPIs dont CA HT / TTC / TVA depuis les factures |
+| **Rapports** (`/reports`) | KPI du mois, journal des ventes et des encaissements, export CSV Excel |
 | **Portail Public** (`/portal`) | Interface externe pour partenaires et candidats |
 
 ---
@@ -334,6 +334,22 @@ Patches (bases deja deployees) :
 13. `fix-quality-haccp.sql` — Quarantaine / libération / rebut des lots
 14. `fix-inventory-units.sql` — Inventaire physique + conditionnements
 
+Patches audit septembre 2026 (apres 1-14, dans l'ordre) :
+
+15. `fix-warehouses.sql` — Multi-entrepot : table warehouses + rattachement lots/mouvements + RPC transfert
+16. `fix-inventory-freeze.sql` — Gel stock pendant inventaire + comptage a l'aveugle
+17. `fix-quality-coa.sql` — CCP / COA labo (quality_coa, quality_ccp) + bucket quality-coa
+18. `fix-production-yield.sql` — Rendement production (quantite reelle obtenue)
+19. `fix-purchase-payments.sql` — Paiements fournisseur (purchase_payments) + soldes
+20. `fix-clients-file.sql` — Fiche partenaire complete (RCCM, ville, contact, actif...)
+21. `fix-quotes-extra.sql` — Devis : conversion atomique, notifications, bucket devis-pdf
+22. `fix-delivery-notes-extra.sql` — BL : garde etendue, restauration a l'annulation
+23. `fix-documents-register.sql` — Documents generaux : registre + PDF + bucket general-documents
+24. `fix-requests-respond.sql` — Demandes externes : renvoi fichier (bucket public request-responses)
+25. `fix-portal-orders.sql` — Portail : catalogue (is_catalog) + commandes (portal_orders)
+26. `fix-candidates-cv.sql` — Recrutement : bucket cvs pour CV
+27. `fix-employee-selfservice.sql` — Conges self-service : policies RLS self_* + user_id employes
+
 ---
 
 ## Roles et permissions
@@ -343,10 +359,50 @@ Patches (bases deja deployees) :
 | `admin` | Acces complet a tous les modules |
 | `ceo` | Acces complet + validation |
 | `manager` | Gestion equipe + validation documents |
-| `employee` | Acces dashboard interne |
-| `partner` | Portail externe uniquement (middleware : pas d'acces dashboard) |
+|   `employee` | Acces dashboard interne |
+|   `partner` | Portail externe uniquement (middleware : pas d'acces dashboard) |
 
 **Permission speciale** : `can_validate_invoices` (booleen sur `profiles`) donne le droit de valider les factures independamment du role.
+
+---
+
+## Évolutions septembre 2026 — audit fonctionnel 9/10
+
+Revue complete des 23 modules (audit : scores /10) : les lacunes relevees ont ete
+comblees. A deployer : executer les nouveaux patches SQL listes ci-dessous (section
+"Migrations a executer"), dans l'ordre, sur la base Supabase.
+
+| Module | Evolution livree |
+|--------|------------------|
+| Devis | Workflow durci : rejet avec motif, date de validite + badge expire, conversion devis→facture **atomique** (fonction SQL `convert_quote_to_invoice`, anti-doublon), PDF archive (bucket `devis-pdf`), notifications `quote_approved/rejected/converted` |
+| Facturation | (deja 9/10 — conserve) |
+| Bons de livraison | Garde SQL etendue aux deux types de BL (`bon_livraison` / `bon_de_livraison`), restauration stock a l'annulation d'un BL autonome, motif de rejet, reception signee |
+| Achats | Paiements fournisseur (`purchase_payments`) + badges Impayee/Partielle/Payee + soldes fournisseurs |
+| Production | Rendement : quantite reellement obtenue, % rendement, notes de pertes, annulation au juste quantite |
+| Qualite | CCP (controles points critiques HACCP) + COA labo (`quality_coa`/`quality_ccp`) avec certificat d'analyse PDF archive |
+| Stock | **Multi-entrepot** : table `warehouses`, lots rattaches a un entrepot, transfert entre entrepots (RPC `transfer_batch`), vue stock par entrepot |
+| Inventaire | **Gel du stock** pendant une seance (trigger garde) + **comptage a l'aveugle** (colonne `blind`, reveil des ecarts par un manager) |
+| Clients | Fiche partenaire complete : RCCM, ville, site web, contact, termes de paiement, plafond, actif/inactif + page detail avec historique financier (factures, encaissements, achats, documents) |
+| Tableau de bord | Centre de commande : alertes qualite/quarantaine + lots a peremption proche, activite recente, KPIs gated par role (employee = vue operationnelle sans finance) |
+| Rapports | **Grand livre simplifie** : auxiliaires 411 clients / 401 fournisseurs (debit, credit, solde courant) + export CSV Excel |
+| Documents generaux | Vrai module : categories (lettre, note de service, PV, rapport, convention...), reference `DOC-…`, PDF officiel jsPDF genere et archive (bucket `general-documents`), cycle envoye/archive |
+| Demandes externes | Reponse avec fichier + **renvoi au demandeur par email** (lien de telechargement public), trace `email_sent_at` |
+| Portail public | **Catalogue produits + commande** (panier, `portal_orders`) + page interne "Commandes portail" pour le suivi |
+| Employes | Correction types TS + liaison employe ↔ compte utilisateur (endpoint admin `link-employee`, invite si cle service) |
+| Contrats / Attestations / Fiches de paie | (deja 8/10 — conserves) |
+| Conges | **Self-service salarie** : page "Mes congés" (`/me/conges`) — soldes, demande, suivi — policies RLS `self_*` etroites |
+| Recrutement | Upload CV branche sur le storage (bucket `cvs`), apercu/telechargement, correction types TS |
+| Roles | Gestion statut actif/inactif, garde-fous (pas d'auto-demotion, dernier admin protege), recherche |
+| Notifications | Cloche robuste : nouveaux types devis, "Tout marquer comme lu", compteur reel, fallback types inconnus |
+| Authentification | **Reset de mot de passe** complet (`/forgot-password` → email → `/reset-password`), routes publiques middleware |
+
+**Deploiement** : projet Supabase lie au CLI (`supabase link` — ref `wckiopvkmcoulcnwbjaw`, fichier `supabase/config.toml`). Les 13 patches
+audit (versions `20260909160000`…`20260909160012`) ont ete appliques sur la base distante le 09/09/2026 via `supabase db push --linked`
+et sont conserves sous `supabase/migrations/`. La base distante divergeait du setup.sql (colonnes `documents.content`/`updated_at`,
+`clients.tax_id`, `employees.user_id`, `document_requests.handled_by` absentes) : les patches ont ete rendus autosuffisants
+(`ADD COLUMN IF NOT EXISTS`) pour couvrir les deux cas. Remarque : pour toute nouvelle migration, preferer
+`gen_random_uuid()` (natif) a `uuid_generate_v4()` (extension `uuid-ossp` hors search_path du role de migration CLI).
+
 
 ---
 
@@ -370,10 +426,11 @@ Patches (bases deja deployees) :
 
 - [ ] **Application mobile** (React Native ou PWA) pour les agents terrain
 - [ ] **Multi-entreprise** : gerer plusieurs societes depuis une seule instance
-- [ ] **Comptabilite** : journal des ventes, grand livre, bilan simplifie
+- [x] **Journal des ventes / encaissements** : mois sur `/reports`, export CSV Excel (`;`, UTF-8 BOM)
+- [ ] **Comptabilite** : grand livre, bilan simplifie
 - [ ] **Integration bancaire** : rapprochement automatique des paiements
 - [ ] **Paiements fournisseurs** : factures d'achat, echeances, rapprochement
-- [ ] **Export comptable** : export CSV/Excel compatible avec les logiciels comptables locaux
+- [ ] **Export logiciel** : mapping Sage / Ciel / EBP
 
 ---
 
