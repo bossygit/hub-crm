@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
+import appIcon from '../../assets/images/app-icon.png'
 import { homeForRole } from '@/lib/auth/access'
 
 export default function LoginPage() {
