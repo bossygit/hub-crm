@@ -464,3 +464,7 @@ body {
   .sidebar { transform: translateX(-100%); }
   .main-content { margin-left: 0; }
 }
+
+/* Hover léger — utilisé par les composants serveur (pas de handlers JS en SSR) */
+.hoverable-card:hover { box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08); transform: translateY(-1px); }
+.hoverable-row:hover { background: #fafaf7; }

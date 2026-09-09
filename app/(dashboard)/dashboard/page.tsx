@@ -121,8 +121,7 @@ function PulseRow({ tiles }: { tiles: PulseTile[] }) {
             background: 'white', border: '1px solid #e8e4db', borderRadius: 12, padding: '14px 16px',
             display: 'flex', flexDirection: 'column', gap: 2, transition: 'box-shadow 0.15s, transform 0.15s',
           }}
-          onMouseEnter={e => { const el = e.currentTarget as HTMLDivElement; el.style.boxShadow = '0 4px 14px rgba(0,0,0,0.08)'; el.style.transform = 'translateY(-1px)' }}
-          onMouseLeave={e => { const el = e.currentTarget as HTMLDivElement; el.style.boxShadow = 'none'; el.style.transform = 'none' }}
+          className="hoverable-card"
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
               <span style={{ fontSize: '1.2rem' }}>{t.icon}</span>
@@ -456,8 +455,7 @@ export default async function DashboardPage() {
                   return (
                     <Link key={inv.id} href={`/invoices/${inv.id}`} style={{ textDecoration: 'none', color: 'inherit' }}>
                       <div style={{ padding: '12px 20px', borderBottom: '1px solid #f8f6f2', display: 'flex', alignItems: 'center', gap: 12, transition: 'background 0.12s' }}
-                        onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.background = '#fafaf7' }}
-                        onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = 'transparent' }}
+                        className="hoverable-row"
                       >
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--hub-green-mid)', fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
