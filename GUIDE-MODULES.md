@@ -14,8 +14,12 @@ HUB Distribution CRM
 │   ├── Devis .................. Propositions commerciales
 │   ├── Facturation ............ Cycle de vie complet des factures
 │   ├── Bons de Livraison ...... Suivi des livraisons
-│   ├── Commandes / Ventes ..... Historique des ventes
-│   ├── Gestion de Stock ....... Produits, entrees/sorties, alertes
+│   ├── Achats & reception ..... Commande fournisseur, lot, entree stock
+│   ├── Production ............. Recettes (BOM) + ordres MP → produit fini
+│   ├── Qualité ................ Quarantaine / libération / rebut des lots
+│   ├── Gestion de Stock ....... Produits, lots, entrees/sorties, alertes
+│   ├── Inventaire ............. Comptage physique par lot + écarts
+│   ├── Tracabilite lots ....... Rappel lot → client (factures / BL)
 │   └── Clients & Partenaires .. Fichier client complet
 ├── Documents
 │   ├── Documents .............. Documents generaux
@@ -82,6 +86,8 @@ Le module le plus complet. Gere le cycle de vie entier d'une facture.
 - Generation de **recus de paiement** PDF pour chaque paiement
 - Auto-sauvegarde toutes les 3 secondes en brouillon
 - Possibilite de **generer un bon de livraison** depuis une facture validee
+- **Lot (optionnel)** sur chaque ligne produit : suggestion FEFO (date de peremption la plus proche). Le lot est copie sur le BL et sur les mouvements de stock a la validation
+- **Source unique du CA** : les rapports lisent `invoices` (statuts validee / partielle / payee). L'ancienne page `/sales` redirige vers `/invoices` ; les tables `sales` restent en base pour l'historique.
 
 **Notification :** quand une facture passe en `En attente`, les validateurs recoivent une notification in-app + email.
 
@@ -92,30 +98,92 @@ Le module le plus complet. Gere le cycle de vie entier d'une facture.
 Accompagnent les marchandises livrees au client.
 
 **Fonctionnalites :**
-- Creation manuelle ou **depuis une facture** (pre-remplissage automatique des lignes)
+- Creation manuelle ou **depuis une facture** (pre-remplissage automatique des lignes, y compris le lot)
 - Workflow : `Brouillon` → `En attente` → `Livre` / `Annule`
-- La validation (passage a `Livre`) **decremente le stock** via un trigger SQL
+- **Stock** : un BL **autonome** (sans facture) decremente le stock a la validation. Un BL **lie a une facture** ne touche pas le stock — la sortie a deja eu lieu a la validation de la facture
 - Lien avec la facture d'origine
-- Generation PDF avec zone de signature client
+- Generation PDF avec zone de signature client (n° de lot affiche sur les lignes)
 
 **Notification :** quand un BL passe en `En attente`, notification aux admins/managers.
 
 ---
 
-## 5. Gestion de Stock (`/stock`)
+## 5. Achats & reception (`/purchases`)
+
+Cycle fournisseur : commande → reception de matieres premieres.
+
+**Cycle de vie :**
+
+| Statut | Description |
+|--------|-------------|
+| Brouillon | Saisie en cours |
+| Commande | En attente de livraison fournisseur |
+| Receptionne | Lot cree, entree de stock |
+| Annule | Sortie de stock inverse (si deja receptionne) |
+
+**Points cles :**
+- Fournisseur = fiche `clients` de type `fournisseur`
+- Chaque ligne peut porter un n° de lot, une date de production et une peremption. Si le lot est vide, il est genere (`ACH-2026-0001-L1`)
+- **Receptionner** cree `product_batches` + mouvement `IN` (le trigger `update_product_quantity` met a jour produit et lot)
+- Impression d'un bon de reception
+
+---
+
+## 6. Production (`/production`)
+
+Transformation matiere premiere → produit fini.
+
+**Recettes :**
+- Un produit fini, une quantite de sortie, et une liste d'ingredients (quantites pour cette sortie)
+- Exemple : 10 kg de farine = 12 kg de manioc + 0,2 L d'huile
+
+**Ordres :**
+- Choix d'une recette, quantite a produire (les ingredients sont proportionnels)
+- Allocation **FEFO** des lots de MP
+- **Produire** : sorties de stock MP + creation d'un lot produit fini + entree stock
+- Annulation : restauration inverse
+
+---
+
+## 7. Qualité / libération des lots (`/quality`)
+
+Les lots issus d'une **réception d'achat** ou d'une **production** arrivent en quarantaine. Ils ne sont ni vendables ni consommables tant qu'ils ne sont pas libérés.
+
+| Décision | Effet |
+|----------|--------|
+| Libérer | Le lot devient utilisable (FEFO, facture, BL, production) |
+| Rejeter | Rebut : mouvement `OUT`, quantité du lot à 0 |
+
+Les lots déjà en stock avant ce module restent **libérés**.
+
+---
+
+## 8. Gestion de Stock (`/stock`)
 
 Suivi des produits et de leurs mouvements.
 
 **Fonctionnalites :**
 - Liste des produits avec quantite actuelle, seuil d'alerte, prix unitaire
-- Enregistrement des mouvements (entree/sortie) avec motif et reference
-- Les mouvements lies aux factures et BL sont **automatiques** (via triggers SQL)
-- Alerte visuelle quand un produit passe sous le seuil
+- Lots (`product_batches`) : numero, quantite, dates de production / peremption, fournisseur, **statut qualité**
+- Enregistrement des mouvements (entree/sortie) avec motif, reference et `batch_id`
+- Les mouvements lies aux factures, aux BL autonomes, aux **receptions d'achat** et aux **ordres de production** sont **automatiques** (via triggers SQL) et portent le lot de la ligne
+- Alerte visuelle quand un produit passe sous le seuil, lots expires / a 30 jours
 - Impression de bons d'entree/sortie stock
+- **Inventaire physique** (`/stock/inventory`) : comptage par lot (et hors-lot). L'ecart valide cree un mouvement `ADJUST`
+- **Conditionnements** : sur la fiche produit (ex. 1 sac = 50 kg). Facture, BL et achat convertissent vers l'unite de base
+
+### Tracabilite / rappel (`/stock/recall`)
+
+Repond a « ce lot est parti chez qui ? ».
+
+- Recherche par n° de lot ou produit
+- Clients concernes (factures et BL, hors brouillon / rejete / annule)
+- Genealogie des documents + historique des mouvements du lot
+- Impression d'une fiche de rappel
 
 ---
 
-## 6. Clients & Partenaires (`/clients`)
+## 9. Clients & Partenaires (`/clients`)
 
 Fichier client complet.
 
@@ -126,7 +194,7 @@ Fichier client complet.
 
 ---
 
-## 7. Contrats de travail (`/hr/contracts`)
+## 10. Contrats de travail (`/hr/contracts`)
 
 **Fonctionnalites :**
 - Liste des contrats filtrables par employe et type (CDI, CDD, stage, freelance)
@@ -136,7 +204,7 @@ Fichier client complet.
 
 ---
 
-## 8. Attestations de travail (`/hr/certificates`)
+## 11. Attestations de travail (`/hr/certificates`)
 
 **Fonctionnalites :**
 - Selection d'un employe, contenu pre-rempli automatiquement
@@ -145,7 +213,7 @@ Fichier client complet.
 
 ---
 
-## 9. Fiches de paie (`/hr/payslips`)
+## 12. Fiches de paie (`/hr/payslips`)
 
 **Fonctionnalites :**
 - Selection employe + mois/annee
@@ -155,7 +223,7 @@ Fichier client complet.
 
 ---
 
-## 10. Conges (`/hr/leaves`)
+## 13. Conges (`/hr/leaves`)
 
 **Fonctionnalites :**
 - KPIs : demandes en attente, approuvees ce mois, soldes faibles
@@ -169,7 +237,7 @@ Fichier client complet.
 
 ---
 
-## 11. Systeme de Notifications
+## 14. Systeme de Notifications
 
 Deux canaux complementaires :
 
@@ -191,15 +259,14 @@ Deux canaux complementaires :
 
 ---
 
-## 12. Autres modules
+## 15. Autres modules
 
 | Module | Description |
 |--------|-------------|
-| **Commandes / Ventes** (`/sales`) | Historique des commandes et ventes |
 | **Documents** (`/documents`) | Documents generaux de l'entreprise |
 | **Demandes Externes** (`/requests`) | Demandes de documents par des tiers (DGI, assurances, banques) |
 | **Recrutement** (`/recruitment`) | Offres d'emploi et suivi des candidatures |
-| **Rapports** (`/reports`) | Rapports et statistiques |
+| **Rapports** (`/reports`) | KPIs dont CA HT / TTC / TVA depuis les factures |
 | **Portail Public** (`/portal`) | Interface externe pour partenaires et candidats |
 
 ---
@@ -222,12 +289,23 @@ Deux canaux complementaires :
 | `profiles` | Utilisateurs, roles, permissions |
 | `clients` | Clients, fournisseurs, partenaires |
 | `products` | Catalogue produits |
-| `stock_movements` | Entrees/sorties de stock |
+| `product_batches` | Lots (n°, peremption, quantite, statut qualité) |
+| `quality_checks` | Contrôles de libération / rebut |
+| `product_units` | Conditionnements (facteur vers unité de base) |
+| `inventory_sessions` | Séances d'inventaire physique |
+| `inventory_lines` | Comptage par lot / hors-lot |
+| `stock_movements` | Entrees/sorties de stock (avec `batch_id`) |
 | `invoices` | Factures |
-| `invoice_items` | Lignes de facture |
+| `invoice_items` | Lignes de facture (avec `batch_id`) |
 | `invoice_payments` | Paiements recus |
+| `purchases` | Achats / receptions fournisseur |
+| `purchase_items` | Lignes d'achat (lot, peremption) |
+| `recipes` | Recettes / nomenclatures |
+| `recipe_items` | Ingredients d'une recette |
+| `production_orders` | Ordres de production |
+| `production_order_items` | MP consommees (lots FEFO) |
 | `documents` | Devis, BL, documents generaux |
-| `document_items` | Lignes de devis/BL |
+| `document_items` | Lignes de devis/BL (avec `batch_id`) |
 | `employees` | Employes |
 | `employee_documents` | Contrats, attestations, fiches de paie, conges |
 | `leave_balances` | Soldes de conges par employe/annee |
@@ -246,6 +324,16 @@ Deux canaux complementaires :
 6. `supabase-migration-hr-documents.sql` — Documents RH (contrats, conges, etc.)
 7. `supabase-migration-notifications.sql` — Systeme de notifications
 
+Patches (bases deja deployees) :
+
+8. `fix-single-stock-exit.sql` — Un BL lie a une facture ne touche plus le stock
+9. `fix-first-user-admin.sql` — Premier compte = admin + RPC `profiles_exist` (protege `/register`)
+10. `fix-batch-traceability.sql` — `batch_id` sur lignes facture/BL + sorties stock par lot
+11. `fix-purchases-receipt.sql` — Tables achats + reception = lot + entree stock
+12. `fix-production-bom.sql` — Recettes + ordres de production (MP → PF)
+13. `fix-quality-haccp.sql` — Quarantaine / libération / rebut des lots
+14. `fix-inventory-units.sql` — Inventaire physique + conditionnements
+
 ---
 
 ## Roles et permissions
@@ -256,7 +344,7 @@ Deux canaux complementaires :
 | `ceo` | Acces complet + validation |
 | `manager` | Gestion equipe + validation documents |
 | `employee` | Acces dashboard interne |
-| `partner` | Portail externe uniquement |
+| `partner` | Portail externe uniquement (middleware : pas d'acces dashboard) |
 
 **Permission speciale** : `can_validate_invoices` (booleen sur `profiles`) donne le droit de valider les factures independamment du role.
 
@@ -266,18 +354,16 @@ Deux canaux complementaires :
 
 ### Court terme (prioritaire)
 
-- [ ] **Executer les migrations SQL** dans Supabase (SQL Editor) dans l'ordre indique ci-dessus
+- [ ] **Executer les migrations SQL** dans Supabase (SQL Editor) dans l'ordre indique ci-dessus, plus les patches `fix-single-stock-exit.sql`, `fix-first-user-admin.sql`, `fix-batch-traceability.sql`, `fix-purchases-receipt.sql`, `fix-production-bom.sql`, `fix-quality-haccp.sql` et `fix-inventory-units.sql`
 - [ ] **Configurer le domaine Resend** : verifier un domaine d'envoi (ex: `hubdistribution.com`) dans le dashboard Resend pour que les emails partent correctement
-- [ ] **Creer le premier compte admin** : s'inscrire via `/register`, puis changer le `role` a `admin` dans la table `profiles` via Supabase
+- [ ] **Creer le premier compte admin** : `/register` n'est ouvert que s'il n'existe aucun profil ; le premier compte est admin. Ensuite desactiver « Allow new users to sign up » dans Supabase Auth
 - [ ] **Tester le workflow complet** : creer une facture brouillon → soumettre → verifier la notification → valider → enregistrer un paiement
 
 ### Moyen terme (ameliorations)
 
-- [ ] **Bon de commande** : ajouter un module commandes fournisseurs (achat de matieres premieres)
 - [ ] **Facture proforma** : variante non officielle de la facture, utilisee avant paiement
 - [ ] **Rapports avances** : chiffre d'affaires par mois, par client, par produit ; marge beneficiaire
 - [ ] **Tableau de bord financier** : tresorerie, encaissements/decaissements, previsions
-- [ ] **Module production** : ordres de production, fiches de transformation (matiere premiere → produit fini)
 - [ ] **Rapport d'inventaire** : etat reel du stock vs theorique
 
 ### Long terme (vision produit)
@@ -286,7 +372,7 @@ Deux canaux complementaires :
 - [ ] **Multi-entreprise** : gerer plusieurs societes depuis une seule instance
 - [ ] **Comptabilite** : journal des ventes, grand livre, bilan simplifie
 - [ ] **Integration bancaire** : rapprochement automatique des paiements
-- [ ] **Module fournisseurs** : gestion complete du cycle d'achat
+- [ ] **Paiements fournisseurs** : factures d'achat, echeances, rapprochement
 - [ ] **Export comptable** : export CSV/Excel compatible avec les logiciels comptables locaux
 
 ---

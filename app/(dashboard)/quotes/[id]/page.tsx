@@ -85,7 +85,7 @@ export default function QuoteDetailPage() {
       if (error || !inv) throw new Error(error?.message || 'Erreur')
       if (items.length > 0) {
         await supabase.from('invoice_items').insert(
-          items.map((it, idx) => ({ invoice_id: inv.id, product_id: it.product_id, name: it.name, description: it.description || '', quantity: it.quantity, unit: it.unit || 'kg', unit_price: it.unit_price, tax_rate: doc.tax_rate || 18, sort_order: idx }))
+          items.map((it, idx) => ({ invoice_id: inv.id, product_id: it.product_id, batch_id: it.batch_id || null, name: it.name, description: it.description || '', quantity: it.quantity, unit: it.unit || 'kg', unit_price: it.unit_price, tax_rate: doc.tax_rate || 18, sort_order: idx }))
         )
       }
       await supabase.from('documents').update({ status: 'converted', invoice_id: inv.id }).eq('id', id)

@@ -13,9 +13,27 @@ export interface Client {
 }
 export interface Product {
   id: string; name: string; category: string; quantity: number; unit: string; threshold_alert: number; price_per_unit?: number; description?: string; created_at: string
+  units?: ProductUnit[]
 }
+export interface ProductUnit {
+  id?: string; product_id: string; unit: string; factor: number
+}
+export type QualityStatus = 'pending' | 'released' | 'rejected'
 export interface ProductBatch {
-  id: string; product_id: string; product?: Product; batch_number: string; quantity: number; expiry_date?: string; production_date?: string; supplier?: string; cost_per_unit?: number; notes?: string; created_at: string
+  id: string; product_id: string; product?: Product; batch_number: string; quantity: number; expiry_date?: string; production_date?: string; supplier?: string; cost_per_unit?: number; notes?: string; quality_status?: QualityStatus; created_at: string
+}
+export interface QualityCheck {
+  id: string; check_number: string; batch_id: string; batch?: ProductBatch; result: 'released' | 'rejected'; source?: 'purchase' | 'production' | 'manual' | null; notes?: string; checked_by?: string; created_at: string
+}
+export type InventoryStatus = 'draft' | 'approved' | 'cancelled'
+export interface InventoryLine {
+  id?: string; session_id?: string; product_id?: string | null; batch_id?: string | null
+  name: string; batch_number?: string | null; unit: string
+  theoretical: number; counted: number; entry_quantity?: number; entry_unit?: string
+}
+export interface InventorySession {
+  id: string; session_number: string; status: InventoryStatus; notes?: string
+  created_at: string; validated_at?: string; lines?: InventoryLine[]
 }
 export interface StockMovement {
   id: string; product_id: string; product?: Product; batch_id?: string; batch?: ProductBatch; type: 'IN' | 'OUT' | 'ADJUST'; quantity: number; reason?: string; reference_type?: string; date: string; created_at: string
@@ -45,6 +63,8 @@ export interface DocumentItem {
   unit_price: number
   subtotal?: number
   sort_order?: number
+  batch_id?: string | null
+  batch?: ProductBatch
 }
 export interface Employee {
   id: string; user_id?: string; employee_number?: string; full_name: string; position: string; department: string; email?: string; phone?: string; hire_date: string; contract_type: 'cdi' | 'cdd' | 'stage' | 'freelance'; salary?: number; status: EmployeeStatus; address?: string; notes?: string; created_at: string
@@ -85,6 +105,8 @@ export interface InvoiceItem {
   tax_rate: number
   subtotal?: number
   sort_order?: number
+  batch_id?: string | null
+  batch?: ProductBatch
 }
 
 export interface Invoice {
@@ -132,6 +154,100 @@ export interface ClientFinancialSummary {
   total_paid: number
   balance_due: number
   last_invoice_date?: string
+}
+
+export type PurchaseStatus = 'draft' | 'pending' | 'approved' | 'cancelled'
+
+export interface PurchaseItem {
+  id?: string
+  purchase_id?: string
+  product_id?: string | null
+  product?: Product
+  batch_id?: string | null
+  batch?: ProductBatch
+  name: string
+  quantity: number
+  unit: string
+  unit_price: number
+  batch_number?: string | null
+  expiry_date?: string | null
+  production_date?: string | null
+  subtotal?: number
+  sort_order?: number
+}
+
+export interface Purchase {
+  id: string
+  purchase_number: string
+  supplier_id?: string | null
+  supplier?: Client
+  date: string
+  status: PurchaseStatus
+  subtotal: number
+  notes?: string
+  created_by?: string
+  received_by?: string
+  received_at?: string
+  created_at: string
+  updated_at?: string
+  items?: PurchaseItem[]
+}
+
+export type ProductionStatus = 'draft' | 'pending' | 'approved' | 'cancelled'
+
+export interface RecipeItem {
+  id?: string
+  recipe_id?: string
+  product_id: string
+  product?: Product
+  quantity: number
+  unit: string
+  sort_order?: number
+}
+
+export interface Recipe {
+  id: string
+  name: string
+  product_id: string
+  product?: Product
+  output_quantity: number
+  unit: string
+  notes?: string
+  created_at: string
+  items?: RecipeItem[]
+}
+
+export interface ProductionOrderItem {
+  id?: string
+  order_id?: string
+  product_id?: string | null
+  product?: Product
+  batch_id?: string | null
+  batch?: ProductBatch
+  name: string
+  quantity: number
+  unit: string
+  sort_order?: number
+}
+
+export interface ProductionOrder {
+  id: string
+  order_number: string
+  recipe_id?: string | null
+  recipe?: Recipe
+  product_id?: string | null
+  product?: Product
+  quantity: number
+  status: ProductionStatus
+  batch_number?: string | null
+  expiry_date?: string | null
+  production_date?: string | null
+  output_batch_id?: string | null
+  output_batch?: ProductBatch
+  notes?: string
+  created_at: string
+  completed_at?: string
+  items?: ProductionOrderItem[]
 }
 
 // ── NOTIFICATIONS ────────────────────────────────────

@@ -8,7 +8,11 @@ Système de gestion intégré pour **HUB Distribution**, entreprise de transform
 |--------|-------------|
 | **Dashboard** | Tableau de bord avec stats temps réel + alertes stock |
 | **Clients & Partenaires** | Gestion clients, fournisseurs, institutions |
-| **Gestion de Stock** | Produits, entrées/sorties, alertes stock bas |
+| **Achats & réception** | Commandes fournisseurs, lots, entrée de stock |
+| **Production** | Recettes (BOM) et ordres MP → produit fini |
+| **Qualité** | Quarantaine, libération et rebut des lots |
+| **Inventaire** | Comptage physique par lot, conditionnements (sac/carton) |
+| **Gestion de Stock** | Produits, lots, entrées/sorties, alertes stock bas |
 | **Documents** | Génération & gestion de documents (factures, attestations, BL...) |
 | **Recrutement** | Offres d'emploi + suivi des candidatures |
 | **Demandes Externes** | Traitement des demandes de documents (DGI, assurances, etc.) |
@@ -34,9 +38,10 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJxxxx...
 3. Déployer ✅
 
 ### 4. Créer le premier compte admin
-1. Accéder à `/register` sur l'app déployée
-2. Créer un compte
-3. Dans Supabase > Table Editor > `profiles`, changer `role` de `employee` à `admin`
+1. Accéder à `/register` **tant qu’aucun profil n’existe** (ensuite la page redirige vers `/login`)
+2. Créer un compte — le premier profil devient **admin** automatiquement
+3. Dans Supabase → Authentication → Providers → Email : **désactiver** « Allow new users to sign up » pour bloquer aussi `signUp` via la clé anon
+4. Les comptes suivants se créent dans Supabase Auth (ou plus tard via un flux d’invitation)
 
 ## 🛠 Stack technique
 

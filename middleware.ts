@@ -1,15 +1,12 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
-
-const PUBLIC_PATHS = ['/login', '/register', '/portal']
-
-const RESTRICTED_ROUTES: { prefix: string; allowedRoles: string[] }[] = [
-  { prefix: '/employees', allowedRoles: ['ceo', 'manager', 'admin'] },
-  { prefix: '/hr', allowedRoles: ['ceo', 'manager', 'admin'] },
-  { prefix: '/reports', allowedRoles: ['ceo', 'manager', 'admin'] },
-  { prefix: '/recruitment', allowedRoles: ['ceo', 'manager', 'admin'] },
-  { prefix: '/admin', allowedRoles: ['ceo', 'admin'] },
-]
+import {
+  canAccessPath,
+  homeForRole,
+  isPublicPath,
+  isRegisterOpen,
+  isRegisterPath,
+} from '@/lib/auth/access'
 
 export async function middleware(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request })
@@ -36,36 +33,43 @@ export async function middleware(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   const pathname = request.nextUrl.pathname
 
-  const isPublic = PUBLIC_PATHS.some(p => pathname === p || pathname.startsWith(p + '/'))
+  async function roleOf(userId: string) {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', userId)
+      .single()
+    return profile?.role as string | undefined
+  }
 
-  if (user && (pathname === '/login' || pathname === '/register')) {
+  function redirectTo(path: string) {
     const url = request.nextUrl.clone()
-    url.pathname = '/dashboard'
+    url.pathname = path
     return NextResponse.redirect(url)
   }
 
-  if (!user && !isPublic && pathname !== '/') {
-    const url = request.nextUrl.clone()
-    url.pathname = '/login'
-    return NextResponse.redirect(url)
+  if (isRegisterPath(pathname)) {
+    if (user) return redirectTo(homeForRole(await roleOf(user.id)))
+    const { data: exists, error } = await supabase.rpc('profiles_exist')
+    if (error || !isRegisterOpen(exists ? 1 : 0)) return redirectTo('/login')
+    return supabaseResponse
+  }
+
+  if (user && (pathname === '/login' || pathname.startsWith('/login/'))) {
+    return redirectTo(homeForRole(await roleOf(user.id)))
+  }
+
+  if (!user && !isPublicPath(pathname) && pathname !== '/') {
+    return redirectTo('/login')
   }
 
   if (user) {
-    const restriction = RESTRICTED_ROUTES.find(r =>
-      pathname === r.prefix || pathname.startsWith(r.prefix + '/')
-    )
-    if (restriction) {
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', user.id)
-        .single()
-
-      if (!profile || !restriction.allowedRoles.includes(profile.role)) {
-        const url = request.nextUrl.clone()
-        url.pathname = '/dashboard'
-        return NextResponse.redirect(url)
-      }
+    const role = await roleOf(user.id)
+    if (!canAccessPath(role, pathname) && pathname !== '/') {
+      return redirectTo(homeForRole(role))
+    }
+    if (pathname === '/' && role === 'partner') {
+      return redirectTo(homeForRole(role))
     }
   }
 

@@ -61,15 +61,25 @@ CREATE TRIGGER on_profile_role_change
   BEFORE INSERT OR UPDATE OF role ON profiles
   FOR EACH ROW EXECUTE FUNCTION sync_validate_permission();
 
--- Auto-create profile on user signup
+-- Auto-create profile on user signup (premier compte = admin)
 CREATE OR REPLACE FUNCTION handle_new_user()
 RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER AS $$
+DECLARE
+  existing integer;
+  new_role text;
 BEGIN
+  SELECT count(*) INTO existing FROM public.profiles;
+  IF existing = 0 THEN
+    new_role := 'admin';
+  ELSE
+    new_role := COALESCE(NEW.raw_user_meta_data->>'role', 'employee');
+  END IF;
+
   INSERT INTO profiles (id, full_name, role)
   VALUES (
     NEW.id,
     COALESCE(NEW.raw_user_meta_data->>'full_name', split_part(NEW.email, '@', 1)),
-    COALESCE(NEW.raw_user_meta_data->>'role', 'employee')
+    new_role
   )
   ON CONFLICT (id) DO NOTHING;
   RETURN NEW;
@@ -80,6 +90,20 @@ DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE FUNCTION handle_new_user();
+
+-- Compte les profils sans exposer les lignes (anon peut savoir si /register est ouvert)
+CREATE OR REPLACE FUNCTION public.profiles_exist()
+RETURNS boolean
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public
+STABLE
+AS $$
+  SELECT EXISTS (SELECT 1 FROM public.profiles);
+$$;
+
+REVOKE ALL ON FUNCTION public.profiles_exist() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.profiles_exist() TO anon, authenticated;
 
 -- ─────────────────────────────────────────────────────
 -- 3. CLIENTS
@@ -140,6 +164,8 @@ CREATE TABLE IF NOT EXISTS product_batches (
   supplier text,
   cost_per_unit numeric DEFAULT 0,
   notes text,
+  quality_status text NOT NULL DEFAULT 'released'
+    CHECK (quality_status IN ('pending', 'released', 'rejected')),
   created_at timestamptz DEFAULT now()
 );
 
@@ -306,6 +332,7 @@ CREATE TABLE IF NOT EXISTS invoice_items (
   id uuid DEFAULT uuid_generate_v4() PRIMARY KEY,
   invoice_id uuid REFERENCES invoices(id) ON DELETE CASCADE NOT NULL,
   product_id uuid REFERENCES products(id) ON DELETE SET NULL,
+  batch_id uuid REFERENCES product_batches(id) ON DELETE SET NULL,
   name text NOT NULL,
   description text,
   quantity numeric NOT NULL DEFAULT 1,
@@ -426,14 +453,20 @@ BEGIN
   -- APPROVED: décrémente le stock
   IF OLD.status IN ('draft', 'pending') AND NEW.status = 'approved' THEN
     FOR item IN
-      SELECT ii.*, p.name AS product_name, p.quantity AS stock_qty
+      SELECT ii.*, p.name AS product_name, p.quantity AS stock_qty,
+             pb.quantity AS batch_qty, pb.batch_number
       FROM invoice_items ii
       JOIN products p ON p.id = ii.product_id
+      LEFT JOIN product_batches pb ON pb.id = ii.batch_id
       WHERE ii.invoice_id = NEW.id AND ii.product_id IS NOT NULL
     LOOP
       IF item.stock_qty < item.quantity THEN
         RAISE EXCEPTION 'Stock insuffisant pour "%" : disponible=%, demandé=%',
           item.product_name, item.stock_qty, item.quantity;
+      END IF;
+      IF item.batch_id IS NOT NULL AND COALESCE(item.batch_qty, 0) < item.quantity THEN
+        RAISE EXCEPTION 'Lot "%" insuffisant pour "%" : disponible=%, demandé=%',
+          item.batch_number, item.product_name, item.batch_qty, item.quantity;
       END IF;
     END LOOP;
 
@@ -441,8 +474,8 @@ BEGIN
       SELECT * FROM invoice_items
       WHERE invoice_id = NEW.id AND product_id IS NOT NULL
     LOOP
-      INSERT INTO stock_movements (product_id, type, quantity, reason, reference_id, reference_type, user_id)
-      VALUES (item.product_id, 'OUT', item.quantity,
+      INSERT INTO stock_movements (product_id, batch_id, type, quantity, reason, reference_id, reference_type, user_id)
+      VALUES (item.product_id, item.batch_id, 'OUT', item.quantity,
         'Facture ' || NEW.invoice_number || ' validée', NEW.id, 'invoice', NEW.validated_by);
     END LOOP;
     NEW.validated_at := now();
@@ -454,8 +487,8 @@ BEGIN
       SELECT * FROM invoice_items
       WHERE invoice_id = NEW.id AND product_id IS NOT NULL
     LOOP
-      INSERT INTO stock_movements (product_id, type, quantity, reason, reference_id, reference_type, user_id)
-      VALUES (item.product_id, 'IN', item.quantity,
+      INSERT INTO stock_movements (product_id, batch_id, type, quantity, reason, reference_id, reference_type, user_id)
+      VALUES (item.product_id, item.batch_id, 'IN', item.quantity,
         'Annulation facture ' || NEW.invoice_number, NEW.id, 'invoice_cancel', NEW.validated_by);
     END LOOP;
   END IF;
@@ -532,6 +565,7 @@ CREATE TABLE IF NOT EXISTS document_items (
   id uuid DEFAULT uuid_generate_v4() PRIMARY KEY,
   document_id uuid REFERENCES documents(id) ON DELETE CASCADE NOT NULL,
   product_id uuid REFERENCES products(id) ON DELETE SET NULL,
+  batch_id uuid REFERENCES product_batches(id) ON DELETE SET NULL,
   name text NOT NULL,
   description text,
   quantity numeric NOT NULL DEFAULT 1,
@@ -571,47 +605,61 @@ BEGIN
 END;
 $$;
 
--- Trigger: validation BL → stock
+-- Trigger: validation BL → stock (uniquement si BL autonome, sans facture liée)
 CREATE OR REPLACE FUNCTION process_bl_validation()
 RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE
   item record;
+  linked_invoice uuid;
 BEGIN
-  IF OLD.type = 'bon_livraison' AND OLD.status != 'approved' AND NEW.status = 'approved' THEN
-    FOR item IN
-      SELECT di.*, p.name AS product_name, p.quantity AS stock_qty
-      FROM document_items di
-      JOIN products p ON p.id = di.product_id
-      WHERE di.document_id = NEW.id AND di.product_id IS NOT NULL
-    LOOP
-      IF item.stock_qty < item.quantity THEN
-        RAISE EXCEPTION 'Stock insuffisant pour "%" : disponible=%, demandé=%',
-          item.product_name, item.stock_qty, item.quantity;
-      END IF;
-    END LOOP;
+  linked_invoice := COALESCE(NEW.invoice_id, OLD.invoice_id);
 
-    FOR item IN
-      SELECT * FROM document_items
-      WHERE document_id = NEW.id AND product_id IS NOT NULL
-    LOOP
-      INSERT INTO stock_movements (product_id, type, quantity, reason, reference_id, reference_type, user_id)
-      VALUES (item.product_id, 'OUT', item.quantity,
-        'Bon de livraison ' || COALESCE(NEW.document_number, NEW.id::text),
-        NEW.id, 'delivery_note', NEW.validated_by);
-    END LOOP;
+  IF OLD.type = 'bon_livraison' AND OLD.status != 'approved' AND NEW.status = 'approved' THEN
+    -- Facture liée : le stock est déjà sorti à la validation de facture
+    IF linked_invoice IS NULL THEN
+      FOR item IN
+        SELECT di.*, p.name AS product_name, p.quantity AS stock_qty,
+               pb.quantity AS batch_qty, pb.batch_number
+        FROM document_items di
+        JOIN products p ON p.id = di.product_id
+        LEFT JOIN product_batches pb ON pb.id = di.batch_id
+        WHERE di.document_id = NEW.id AND di.product_id IS NOT NULL
+      LOOP
+        IF item.stock_qty < item.quantity THEN
+          RAISE EXCEPTION 'Stock insuffisant pour "%" : disponible=%, demandé=%',
+            item.product_name, item.stock_qty, item.quantity;
+        END IF;
+        IF item.batch_id IS NOT NULL AND COALESCE(item.batch_qty, 0) < item.quantity THEN
+          RAISE EXCEPTION 'Lot "%" insuffisant pour "%" : disponible=%, demandé=%',
+            item.batch_number, item.product_name, item.batch_qty, item.quantity;
+        END IF;
+      END LOOP;
+
+      FOR item IN
+        SELECT * FROM document_items
+        WHERE document_id = NEW.id AND product_id IS NOT NULL
+      LOOP
+        INSERT INTO stock_movements (product_id, batch_id, type, quantity, reason, reference_id, reference_type, user_id)
+        VALUES (item.product_id, item.batch_id, 'OUT', item.quantity,
+          'Bon de livraison ' || COALESCE(NEW.document_number, NEW.id::text),
+          NEW.id, 'delivery_note', NEW.validated_by);
+      END LOOP;
+    END IF;
     NEW.validated_at := now();
   END IF;
 
   IF OLD.type = 'bon_livraison' AND OLD.status = 'approved' AND NEW.status = 'rejected' THEN
-    FOR item IN
-      SELECT * FROM document_items
-      WHERE document_id = NEW.id AND product_id IS NOT NULL
-    LOOP
-      INSERT INTO stock_movements (product_id, type, quantity, reason, reference_id, reference_type, user_id)
-      VALUES (item.product_id, 'IN', item.quantity,
-        'Annulation BL ' || COALESCE(NEW.document_number, NEW.id::text),
-        NEW.id, 'delivery_note_cancel', NEW.validated_by);
-    END LOOP;
+    IF linked_invoice IS NULL THEN
+      FOR item IN
+        SELECT * FROM document_items
+        WHERE document_id = NEW.id AND product_id IS NOT NULL
+      LOOP
+        INSERT INTO stock_movements (product_id, batch_id, type, quantity, reason, reference_id, reference_type, user_id)
+        VALUES (item.product_id, item.batch_id, 'IN', item.quantity,
+          'Annulation BL ' || COALESCE(NEW.document_number, NEW.id::text),
+          NEW.id, 'delivery_note_cancel', NEW.validated_by);
+      END LOOP;
+    END IF;
   END IF;
 
   RETURN NEW;
@@ -879,11 +927,13 @@ CREATE INDEX IF NOT EXISTS idx_invoices_status ON invoices(status);
 CREATE INDEX IF NOT EXISTS idx_invoices_date ON invoices(date DESC);
 CREATE INDEX IF NOT EXISTS idx_invoice_items_invoice ON invoice_items(invoice_id);
 CREATE INDEX IF NOT EXISTS idx_invoice_items_product ON invoice_items(product_id);
+CREATE INDEX IF NOT EXISTS idx_invoice_items_batch ON invoice_items(batch_id);
 CREATE INDEX IF NOT EXISTS idx_documents_type ON documents(type);
 CREATE INDEX IF NOT EXISTS idx_documents_invoice ON documents(invoice_id);
 CREATE INDEX IF NOT EXISTS idx_documents_source ON documents(source_document_id);
 CREATE INDEX IF NOT EXISTS idx_document_items_document ON document_items(document_id);
 CREATE INDEX IF NOT EXISTS idx_document_items_product ON document_items(product_id);
+CREATE INDEX IF NOT EXISTS idx_document_items_batch ON document_items(batch_id);
 CREATE INDEX IF NOT EXISTS idx_notifications_recipient ON notifications(recipient_id);
 CREATE INDEX IF NOT EXISTS idx_notifications_read ON notifications(is_read);
 CREATE INDEX IF NOT EXISTS idx_notifications_created ON notifications(created_at DESC);
@@ -891,6 +941,763 @@ CREATE INDEX IF NOT EXISTS idx_employee_documents_employee ON employee_documents
 CREATE INDEX IF NOT EXISTS idx_employee_documents_type ON employee_documents(type);
 CREATE INDEX IF NOT EXISTS idx_employee_documents_status ON employee_documents(status);
 CREATE INDEX IF NOT EXISTS idx_leave_balances_employee ON leave_balances(employee_id);
+
+-- ─────────────────────────────────────────────────────
+-- 12b. ACHATS / RÉCEPTION MATIÈRES PREMIÈRES
+-- ─────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS purchases (
+  id uuid DEFAULT uuid_generate_v4() PRIMARY KEY,
+  purchase_number text UNIQUE NOT NULL,
+  supplier_id uuid REFERENCES clients(id) ON DELETE SET NULL,
+  date date NOT NULL DEFAULT current_date,
+  status text NOT NULL DEFAULT 'draft'
+    CHECK (status IN ('draft', 'pending', 'approved', 'cancelled')),
+  subtotal numeric NOT NULL DEFAULT 0,
+  notes text,
+  created_by uuid REFERENCES profiles(id) ON DELETE SET NULL,
+  received_by uuid REFERENCES profiles(id) ON DELETE SET NULL,
+  received_at timestamptz,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS purchase_items (
+  id uuid DEFAULT uuid_generate_v4() PRIMARY KEY,
+  purchase_id uuid REFERENCES purchases(id) ON DELETE CASCADE,
+  product_id uuid REFERENCES products(id) ON DELETE SET NULL,
+  batch_id uuid REFERENCES product_batches(id) ON DELETE SET NULL,
+  name text NOT NULL,
+  quantity numeric NOT NULL DEFAULT 0,
+  unit text DEFAULT 'kg',
+  unit_price numeric NOT NULL DEFAULT 0,
+  batch_number text,
+  expiry_date date,
+  production_date date,
+  subtotal numeric GENERATED ALWAYS AS (quantity * unit_price) STORED,
+  sort_order integer DEFAULT 0,
+  created_at timestamptz DEFAULT now()
+);
+
+ALTER TABLE purchases ENABLE ROW LEVEL SECURITY;
+ALTER TABLE purchase_items ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "purchases_all" ON purchases FOR ALL USING (auth.role() = 'authenticated');
+CREATE POLICY "purchase_items_all" ON purchase_items FOR ALL USING (auth.role() = 'authenticated');
+
+CREATE OR REPLACE FUNCTION generate_purchase_number()
+RETURNS text LANGUAGE plpgsql AS $$
+DECLARE
+  current_year text;
+  count_this_year integer;
+BEGIN
+  current_year := to_char(now(), 'YYYY');
+  SELECT count(*) INTO count_this_year
+  FROM purchases
+  WHERE purchase_number LIKE 'ACH-' || current_year || '-%';
+  RETURN 'ACH-' || current_year || '-' || lpad((count_this_year + 1)::text, 4, '0');
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION generate_purchase_number() TO authenticated;
+
+CREATE OR REPLACE FUNCTION process_purchase_reception()
+RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+  item record;
+  v_batch_id uuid;
+  v_batch_number text;
+  v_supplier text;
+BEGIN
+  IF OLD.status IN ('draft', 'pending') AND NEW.status = 'approved' THEN
+    SELECT c.name INTO v_supplier FROM clients c WHERE c.id = NEW.supplier_id;
+
+    FOR item IN
+      SELECT * FROM purchase_items
+      WHERE purchase_id = NEW.id AND product_id IS NOT NULL AND quantity > 0
+      ORDER BY sort_order
+    LOOP
+      v_batch_number := COALESCE(NULLIF(btrim(COALESCE(item.batch_number, '')), ''),
+        NEW.purchase_number || '-L' || (item.sort_order + 1)::text);
+
+      INSERT INTO product_batches (product_id, batch_number, quantity, expiry_date, production_date, supplier, cost_per_unit)
+      VALUES (item.product_id, v_batch_number, 0, item.expiry_date, item.production_date, v_supplier, item.unit_price)
+      RETURNING id INTO v_batch_id;
+
+      UPDATE purchase_items SET batch_id = v_batch_id WHERE id = item.id;
+
+      INSERT INTO stock_movements (product_id, batch_id, type, quantity, reason, reference_id, reference_type, user_id)
+      VALUES (item.product_id, v_batch_id, 'IN', item.quantity,
+        'Réception ' || NEW.purchase_number, NEW.id, 'purchase', NEW.received_by);
+    END LOOP;
+
+    NEW.received_at := now();
+  END IF;
+
+  IF OLD.status = 'approved' AND NEW.status = 'cancelled' THEN
+    FOR item IN
+      SELECT * FROM purchase_items
+      WHERE purchase_id = NEW.id AND product_id IS NOT NULL AND quantity > 0
+    LOOP
+      INSERT INTO stock_movements (product_id, batch_id, type, quantity, reason, reference_id, reference_type, user_id)
+      VALUES (item.product_id, item.batch_id, 'OUT', item.quantity,
+        'Annulation réception ' || NEW.purchase_number, NEW.id, 'purchase_cancel', NEW.received_by);
+    END LOOP;
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS on_purchase_status_change ON purchases;
+CREATE TRIGGER on_purchase_status_change
+  BEFORE UPDATE ON purchases
+  FOR EACH ROW EXECUTE FUNCTION process_purchase_reception();
+
+CREATE INDEX IF NOT EXISTS idx_purchases_supplier ON purchases(supplier_id);
+CREATE INDEX IF NOT EXISTS idx_purchases_status ON purchases(status);
+CREATE INDEX IF NOT EXISTS idx_purchases_date ON purchases(date DESC);
+CREATE INDEX IF NOT EXISTS idx_purchase_items_purchase ON purchase_items(purchase_id);
+CREATE INDEX IF NOT EXISTS idx_purchase_items_batch ON purchase_items(batch_id);
+
+-- ─────────────────────────────────────────────────────
+-- 12c. RECETTES / ORDRES DE PRODUCTION
+-- ─────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS recipes (
+  id uuid DEFAULT uuid_generate_v4() PRIMARY KEY,
+  name text NOT NULL,
+  product_id uuid REFERENCES products(id) ON DELETE RESTRICT NOT NULL,
+  output_quantity numeric NOT NULL DEFAULT 1,
+  unit text DEFAULT 'kg',
+  notes text,
+  created_by uuid REFERENCES profiles(id) ON DELETE SET NULL,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS recipe_items (
+  id uuid DEFAULT uuid_generate_v4() PRIMARY KEY,
+  recipe_id uuid REFERENCES recipes(id) ON DELETE CASCADE NOT NULL,
+  product_id uuid REFERENCES products(id) ON DELETE RESTRICT NOT NULL,
+  quantity numeric NOT NULL DEFAULT 0,
+  unit text DEFAULT 'kg',
+  sort_order integer DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS production_orders (
+  id uuid DEFAULT uuid_generate_v4() PRIMARY KEY,
+  order_number text UNIQUE NOT NULL,
+  recipe_id uuid REFERENCES recipes(id) ON DELETE SET NULL,
+  product_id uuid REFERENCES products(id) ON DELETE SET NULL,
+  quantity numeric NOT NULL DEFAULT 0,
+  status text NOT NULL DEFAULT 'draft'
+    CHECK (status IN ('draft', 'pending', 'approved', 'cancelled')),
+  batch_number text,
+  expiry_date date,
+  production_date date,
+  output_batch_id uuid REFERENCES product_batches(id) ON DELETE SET NULL,
+  notes text,
+  created_by uuid REFERENCES profiles(id) ON DELETE SET NULL,
+  completed_by uuid REFERENCES profiles(id) ON DELETE SET NULL,
+  completed_at timestamptz,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS production_order_items (
+  id uuid DEFAULT uuid_generate_v4() PRIMARY KEY,
+  order_id uuid REFERENCES production_orders(id) ON DELETE CASCADE NOT NULL,
+  product_id uuid REFERENCES products(id) ON DELETE SET NULL,
+  batch_id uuid REFERENCES product_batches(id) ON DELETE SET NULL,
+  name text NOT NULL,
+  quantity numeric NOT NULL DEFAULT 0,
+  unit text DEFAULT 'kg',
+  sort_order integer DEFAULT 0
+);
+
+ALTER TABLE recipes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE recipe_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE production_orders ENABLE ROW LEVEL SECURITY;
+ALTER TABLE production_order_items ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "recipes_all" ON recipes FOR ALL USING (auth.role() = 'authenticated');
+CREATE POLICY "recipe_items_all" ON recipe_items FOR ALL USING (auth.role() = 'authenticated');
+CREATE POLICY "production_orders_all" ON production_orders FOR ALL USING (auth.role() = 'authenticated');
+CREATE POLICY "production_order_items_all" ON production_order_items FOR ALL USING (auth.role() = 'authenticated');
+
+CREATE OR REPLACE FUNCTION generate_production_number()
+RETURNS text LANGUAGE plpgsql AS $$
+DECLARE
+  current_year text;
+  count_this_year integer;
+BEGIN
+  current_year := to_char(now(), 'YYYY');
+  SELECT count(*) INTO count_this_year
+  FROM production_orders
+  WHERE order_number LIKE 'PROD-' || current_year || '-%';
+  RETURN 'PROD-' || current_year || '-' || lpad((count_this_year + 1)::text, 4, '0');
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION generate_production_number() TO authenticated;
+
+CREATE OR REPLACE FUNCTION process_production_completion()
+RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+  item record;
+  v_batch_id uuid;
+  v_batch_number text;
+BEGIN
+  IF OLD.status IN ('draft', 'pending') AND NEW.status = 'approved' THEN
+    IF NEW.product_id IS NULL OR NEW.quantity <= 0 THEN
+      RAISE EXCEPTION 'Ordre de production incomplet : produit fini et quantité requis';
+    END IF;
+
+    FOR item IN
+      SELECT poi.*, p.name AS product_name, p.quantity AS stock_qty, pb.quantity AS batch_qty, pb.batch_number
+      FROM production_order_items poi
+      JOIN products p ON p.id = poi.product_id
+      LEFT JOIN product_batches pb ON pb.id = poi.batch_id
+      WHERE poi.order_id = NEW.id AND poi.product_id IS NOT NULL AND poi.quantity > 0
+      ORDER BY poi.sort_order
+    LOOP
+      IF item.batch_id IS NULL THEN
+        RAISE EXCEPTION 'Lot manquant pour la matière « % »', item.product_name;
+      END IF;
+      IF COALESCE(item.batch_qty, 0) < item.quantity THEN
+        RAISE EXCEPTION 'Lot "%" insuffisant pour "%" : disponible=%, demandé=%',
+          item.batch_number, item.product_name, item.batch_qty, item.quantity;
+      END IF;
+      IF item.stock_qty < item.quantity THEN
+        RAISE EXCEPTION 'Stock insuffisant pour "%" : disponible=%, demandé=%',
+          item.product_name, item.stock_qty, item.quantity;
+      END IF;
+    END LOOP;
+
+    FOR item IN
+      SELECT * FROM production_order_items
+      WHERE order_id = NEW.id AND product_id IS NOT NULL AND quantity > 0
+    LOOP
+      INSERT INTO stock_movements (product_id, batch_id, type, quantity, reason, reference_id, reference_type, user_id)
+      VALUES (item.product_id, item.batch_id, 'OUT', item.quantity,
+        'Production ' || NEW.order_number, NEW.id, 'production', NEW.completed_by);
+    END LOOP;
+
+    v_batch_number := COALESCE(NULLIF(btrim(COALESCE(NEW.batch_number, '')), ''), NEW.order_number);
+    INSERT INTO product_batches (product_id, batch_number, quantity, expiry_date, production_date, notes)
+    VALUES (NEW.product_id, v_batch_number, 0, NEW.expiry_date, COALESCE(NEW.production_date, current_date),
+      'Ordre ' || NEW.order_number)
+    RETURNING id INTO v_batch_id;
+
+    INSERT INTO stock_movements (product_id, batch_id, type, quantity, reason, reference_id, reference_type, user_id)
+    VALUES (NEW.product_id, v_batch_id, 'IN', NEW.quantity,
+      'Production ' || NEW.order_number, NEW.id, 'production', NEW.completed_by);
+
+    NEW.output_batch_id := v_batch_id;
+    NEW.completed_at := now();
+  END IF;
+
+  IF OLD.status = 'approved' AND NEW.status = 'cancelled' THEN
+    FOR item IN
+      SELECT * FROM production_order_items
+      WHERE order_id = NEW.id AND product_id IS NOT NULL AND quantity > 0
+    LOOP
+      INSERT INTO stock_movements (product_id, batch_id, type, quantity, reason, reference_id, reference_type, user_id)
+      VALUES (item.product_id, item.batch_id, 'IN', item.quantity,
+        'Annulation production ' || NEW.order_number, NEW.id, 'production_cancel', NEW.completed_by);
+    END LOOP;
+
+    IF NEW.output_batch_id IS NOT NULL THEN
+      INSERT INTO stock_movements (product_id, batch_id, type, quantity, reason, reference_id, reference_type, user_id)
+      VALUES (NEW.product_id, NEW.output_batch_id, 'OUT', NEW.quantity,
+        'Annulation production ' || NEW.order_number, NEW.id, 'production_cancel', NEW.completed_by);
+    END IF;
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS on_production_status_change ON production_orders;
+CREATE TRIGGER on_production_status_change
+  BEFORE UPDATE ON production_orders
+  FOR EACH ROW EXECUTE FUNCTION process_production_completion();
+
+CREATE INDEX IF NOT EXISTS idx_recipes_product ON recipes(product_id);
+CREATE INDEX IF NOT EXISTS idx_recipe_items_recipe ON recipe_items(recipe_id);
+CREATE INDEX IF NOT EXISTS idx_production_orders_status ON production_orders(status);
+CREATE INDEX IF NOT EXISTS idx_production_orders_recipe ON production_orders(recipe_id);
+CREATE INDEX IF NOT EXISTS idx_production_order_items_order ON production_order_items(order_id);
+CREATE INDEX IF NOT EXISTS idx_production_order_items_batch ON production_order_items(batch_id);
+
+-- ─────────────────────────────────────────────────────
+-- 12d. QUALITÉ / LIBÉRATION DES LOTS
+-- ─────────────────────────────────────────────────────
+-- Qualité / libération des lots : quarantaine à la réception et à la production.
+-- Lots existants restent libérés (DEFAULT released).
+-- À exécuter sur une base déjà déployée.
+
+ALTER TABLE product_batches
+  ADD COLUMN IF NOT EXISTS quality_status text NOT NULL DEFAULT 'released';
+
+ALTER TABLE product_batches DROP CONSTRAINT IF EXISTS product_batches_quality_status_check;
+ALTER TABLE product_batches ADD CONSTRAINT product_batches_quality_status_check
+  CHECK (quality_status IN ('pending', 'released', 'rejected'));
+
+CREATE TABLE IF NOT EXISTS quality_checks (
+  id uuid DEFAULT uuid_generate_v4() PRIMARY KEY,
+  check_number text UNIQUE NOT NULL,
+  batch_id uuid REFERENCES product_batches(id) ON DELETE RESTRICT NOT NULL,
+  result text NOT NULL CHECK (result IN ('released', 'rejected')),
+  source text CHECK (source IS NULL OR source IN ('purchase', 'production', 'manual')),
+  notes text,
+  checked_by uuid REFERENCES profiles(id) ON DELETE SET NULL,
+  created_at timestamptz DEFAULT now()
+);
+
+ALTER TABLE quality_checks ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS quality_checks_all ON quality_checks;
+CREATE POLICY "quality_checks_all" ON quality_checks FOR ALL USING (auth.role() = 'authenticated');
+
+CREATE OR REPLACE FUNCTION generate_quality_check_number()
+RETURNS text LANGUAGE plpgsql AS $$
+DECLARE
+  current_year text;
+  count_this_year integer;
+BEGIN
+  current_year := to_char(now(), 'YYYY');
+  SELECT count(*) INTO count_this_year
+  FROM quality_checks
+  WHERE check_number LIKE 'QC-' || current_year || '-%';
+  RETURN 'QC-' || current_year || '-' || lpad((count_this_year + 1)::text, 4, '0');
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION generate_quality_check_number() TO authenticated;
+
+CREATE OR REPLACE FUNCTION process_quality_check()
+RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+  v_batch record;
+BEGIN
+  SELECT * INTO v_batch FROM product_batches WHERE id = NEW.batch_id;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Lot introuvable';
+  END IF;
+  IF COALESCE(v_batch.quality_status, 'released') IS DISTINCT FROM 'pending' THEN
+    RAISE EXCEPTION 'Ce lot n''est pas en quarantaine';
+  END IF;
+
+  IF NEW.result = 'released' THEN
+    UPDATE product_batches SET quality_status = 'released' WHERE id = NEW.batch_id;
+  ELSIF NEW.result = 'rejected' THEN
+    UPDATE product_batches SET quality_status = 'rejected' WHERE id = NEW.batch_id;
+    IF COALESCE(v_batch.quantity, 0) > 0 THEN
+      INSERT INTO stock_movements (product_id, batch_id, type, quantity, reason, reference_id, reference_type, user_id)
+      VALUES (v_batch.product_id, v_batch.id, 'OUT', v_batch.quantity,
+        'Rebut qualité ' || NEW.check_number, NEW.id, 'quality', NEW.checked_by);
+    END IF;
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS on_quality_check_insert ON quality_checks;
+CREATE TRIGGER on_quality_check_insert
+  AFTER INSERT ON quality_checks
+  FOR EACH ROW EXECUTE FUNCTION process_quality_check();
+
+CREATE OR REPLACE FUNCTION process_purchase_reception()
+RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+  item record;
+  v_batch_id uuid;
+  v_batch_number text;
+  v_supplier text;
+BEGIN
+  IF OLD.status IN ('draft', 'pending') AND NEW.status = 'approved' THEN
+    SELECT c.name INTO v_supplier FROM clients c WHERE c.id = NEW.supplier_id;
+
+    FOR item IN
+      SELECT * FROM purchase_items
+      WHERE purchase_id = NEW.id AND product_id IS NOT NULL AND quantity > 0
+      ORDER BY sort_order
+    LOOP
+      v_batch_number := COALESCE(NULLIF(btrim(COALESCE(item.batch_number, '')), ''),
+        NEW.purchase_number || '-L' || (item.sort_order + 1)::text);
+
+      INSERT INTO product_batches (product_id, batch_number, quantity, expiry_date, production_date, supplier, cost_per_unit, quality_status)
+      VALUES (item.product_id, v_batch_number, 0, item.expiry_date, item.production_date, v_supplier, item.unit_price, 'pending')
+      RETURNING id INTO v_batch_id;
+
+      UPDATE purchase_items SET batch_id = v_batch_id WHERE id = item.id;
+
+      INSERT INTO stock_movements (product_id, batch_id, type, quantity, reason, reference_id, reference_type, user_id)
+      VALUES (item.product_id, v_batch_id, 'IN', item.quantity,
+        'Réception ' || NEW.purchase_number, NEW.id, 'purchase', NEW.received_by);
+    END LOOP;
+
+    NEW.received_at := now();
+  END IF;
+
+  IF OLD.status = 'approved' AND NEW.status = 'cancelled' THEN
+    FOR item IN
+      SELECT pi.*, pb.quality_status AS batch_quality
+      FROM purchase_items pi
+      LEFT JOIN product_batches pb ON pb.id = pi.batch_id
+      WHERE pi.purchase_id = NEW.id AND pi.product_id IS NOT NULL AND pi.quantity > 0
+    LOOP
+      IF item.batch_quality = 'rejected' THEN
+        CONTINUE;
+      END IF;
+      INSERT INTO stock_movements (product_id, batch_id, type, quantity, reason, reference_id, reference_type, user_id)
+      VALUES (item.product_id, item.batch_id, 'OUT', item.quantity,
+        'Annulation réception ' || NEW.purchase_number, NEW.id, 'purchase_cancel', NEW.received_by);
+    END LOOP;
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION process_production_completion()
+RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+  item record;
+  v_batch_id uuid;
+  v_batch_number text;
+  v_out_quality text;
+BEGIN
+  IF OLD.status IN ('draft', 'pending') AND NEW.status = 'approved' THEN
+    IF NEW.product_id IS NULL OR NEW.quantity <= 0 THEN
+      RAISE EXCEPTION 'Ordre de production incomplet : produit fini et quantité requis';
+    END IF;
+
+    FOR item IN
+      SELECT poi.*, p.name AS product_name, p.quantity AS stock_qty, pb.quantity AS batch_qty,
+             pb.batch_number, pb.quality_status AS batch_quality
+      FROM production_order_items poi
+      JOIN products p ON p.id = poi.product_id
+      LEFT JOIN product_batches pb ON pb.id = poi.batch_id
+      WHERE poi.order_id = NEW.id AND poi.product_id IS NOT NULL AND poi.quantity > 0
+      ORDER BY poi.sort_order
+    LOOP
+      IF item.batch_id IS NULL THEN
+        RAISE EXCEPTION 'Lot manquant pour la matière « % »', item.product_name;
+      END IF;
+      IF COALESCE(item.batch_quality, 'released') <> 'released' THEN
+        RAISE EXCEPTION 'Lot "%" non libéré (qualité : %) — impossible de consommer « % »',
+          item.batch_number, item.batch_quality, item.product_name;
+      END IF;
+      IF COALESCE(item.batch_qty, 0) < item.quantity THEN
+        RAISE EXCEPTION 'Lot "%" insuffisant pour "%" : disponible=%, demandé=%',
+          item.batch_number, item.product_name, item.batch_qty, item.quantity;
+      END IF;
+      IF item.stock_qty < item.quantity THEN
+        RAISE EXCEPTION 'Stock insuffisant pour "%" : disponible=%, demandé=%',
+          item.product_name, item.stock_qty, item.quantity;
+      END IF;
+    END LOOP;
+
+    FOR item IN
+      SELECT * FROM production_order_items
+      WHERE order_id = NEW.id AND product_id IS NOT NULL AND quantity > 0
+    LOOP
+      INSERT INTO stock_movements (product_id, batch_id, type, quantity, reason, reference_id, reference_type, user_id)
+      VALUES (item.product_id, item.batch_id, 'OUT', item.quantity,
+        'Production ' || NEW.order_number, NEW.id, 'production', NEW.completed_by);
+    END LOOP;
+
+    v_batch_number := COALESCE(NULLIF(btrim(COALESCE(NEW.batch_number, '')), ''), NEW.order_number);
+    INSERT INTO product_batches (product_id, batch_number, quantity, expiry_date, production_date, notes, quality_status)
+    VALUES (NEW.product_id, v_batch_number, 0, NEW.expiry_date, COALESCE(NEW.production_date, current_date),
+      'Ordre ' || NEW.order_number, 'pending')
+    RETURNING id INTO v_batch_id;
+
+    INSERT INTO stock_movements (product_id, batch_id, type, quantity, reason, reference_id, reference_type, user_id)
+    VALUES (NEW.product_id, v_batch_id, 'IN', NEW.quantity,
+      'Production ' || NEW.order_number, NEW.id, 'production', NEW.completed_by);
+
+    NEW.output_batch_id := v_batch_id;
+    NEW.completed_at := now();
+  END IF;
+
+  IF OLD.status = 'approved' AND NEW.status = 'cancelled' THEN
+    FOR item IN
+      SELECT * FROM production_order_items
+      WHERE order_id = NEW.id AND product_id IS NOT NULL AND quantity > 0
+    LOOP
+      INSERT INTO stock_movements (product_id, batch_id, type, quantity, reason, reference_id, reference_type, user_id)
+      VALUES (item.product_id, item.batch_id, 'IN', item.quantity,
+        'Annulation production ' || NEW.order_number, NEW.id, 'production_cancel', NEW.completed_by);
+    END LOOP;
+
+    IF NEW.output_batch_id IS NOT NULL THEN
+      SELECT quality_status INTO v_out_quality FROM product_batches WHERE id = NEW.output_batch_id;
+      IF COALESCE(v_out_quality, 'released') <> 'rejected' THEN
+        INSERT INTO stock_movements (product_id, batch_id, type, quantity, reason, reference_id, reference_type, user_id)
+        VALUES (NEW.product_id, NEW.output_batch_id, 'OUT', NEW.quantity,
+          'Annulation production ' || NEW.order_number, NEW.id, 'production_cancel', NEW.completed_by);
+      END IF;
+    END IF;
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION process_invoice_validation()
+RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+  item record;
+BEGIN
+  IF OLD.status IN ('draft', 'pending') AND NEW.status = 'approved' THEN
+    FOR item IN
+      SELECT ii.*, p.name AS product_name, p.quantity AS stock_qty,
+             pb.quantity AS batch_qty, pb.batch_number, pb.quality_status AS batch_quality
+      FROM invoice_items ii
+      JOIN products p ON p.id = ii.product_id
+      LEFT JOIN product_batches pb ON pb.id = ii.batch_id
+      WHERE ii.invoice_id = NEW.id AND ii.product_id IS NOT NULL
+    LOOP
+      IF item.stock_qty < item.quantity THEN
+        RAISE EXCEPTION 'Stock insuffisant pour "%" : disponible=%, demandé=%',
+          item.product_name, item.stock_qty, item.quantity;
+      END IF;
+      IF item.batch_id IS NOT NULL AND COALESCE(item.batch_quality, 'released') <> 'released' THEN
+        RAISE EXCEPTION 'Lot "%" non libéré (qualité : %) — impossible de facturer « % »',
+          item.batch_number, item.batch_quality, item.product_name;
+      END IF;
+      IF item.batch_id IS NOT NULL AND COALESCE(item.batch_qty, 0) < item.quantity THEN
+        RAISE EXCEPTION 'Lot "%" insuffisant pour "%" : disponible=%, demandé=%',
+          item.batch_number, item.product_name, item.batch_qty, item.quantity;
+      END IF;
+    END LOOP;
+
+    FOR item IN
+      SELECT * FROM invoice_items
+      WHERE invoice_id = NEW.id AND product_id IS NOT NULL
+    LOOP
+      INSERT INTO stock_movements (product_id, batch_id, type, quantity, reason, reference_id, reference_type, user_id)
+      VALUES (item.product_id, item.batch_id, 'OUT', item.quantity,
+        'Facture ' || NEW.invoice_number || ' validée', NEW.id, 'invoice', NEW.validated_by);
+    END LOOP;
+    NEW.validated_at := now();
+  END IF;
+
+  IF OLD.status IN ('approved', 'partial') AND NEW.status = 'cancelled' THEN
+    FOR item IN
+      SELECT * FROM invoice_items
+      WHERE invoice_id = NEW.id AND product_id IS NOT NULL
+    LOOP
+      INSERT INTO stock_movements (product_id, batch_id, type, quantity, reason, reference_id, reference_type, user_id)
+      VALUES (item.product_id, item.batch_id, 'IN', item.quantity,
+        'Annulation facture ' || NEW.invoice_number, NEW.id, 'invoice_cancel', NEW.validated_by);
+    END LOOP;
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION process_bl_validation()
+RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+  item record;
+  linked_invoice uuid;
+BEGIN
+  linked_invoice := COALESCE(NEW.invoice_id, OLD.invoice_id);
+
+  IF OLD.type = 'bon_livraison' AND OLD.status != 'approved' AND NEW.status = 'approved' THEN
+    IF linked_invoice IS NULL THEN
+      FOR item IN
+        SELECT di.*, p.name AS product_name, p.quantity AS stock_qty,
+               pb.quantity AS batch_qty, pb.batch_number, pb.quality_status AS batch_quality
+        FROM document_items di
+        JOIN products p ON p.id = di.product_id
+        LEFT JOIN product_batches pb ON pb.id = di.batch_id
+        WHERE di.document_id = NEW.id AND di.product_id IS NOT NULL
+      LOOP
+        IF item.stock_qty < item.quantity THEN
+          RAISE EXCEPTION 'Stock insuffisant pour "%" : disponible=%, demandé=%',
+            item.product_name, item.stock_qty, item.quantity;
+        END IF;
+        IF item.batch_id IS NOT NULL AND COALESCE(item.batch_quality, 'released') <> 'released' THEN
+          RAISE EXCEPTION 'Lot "%" non libéré (qualité : %) — impossible de livrer « % »',
+            item.batch_number, item.batch_quality, item.product_name;
+        END IF;
+        IF item.batch_id IS NOT NULL AND COALESCE(item.batch_qty, 0) < item.quantity THEN
+          RAISE EXCEPTION 'Lot "%" insuffisant pour "%" : disponible=%, demandé=%',
+            item.batch_number, item.product_name, item.batch_qty, item.quantity;
+        END IF;
+      END LOOP;
+
+      FOR item IN
+        SELECT * FROM document_items
+        WHERE document_id = NEW.id AND product_id IS NOT NULL
+      LOOP
+        INSERT INTO stock_movements (product_id, batch_id, type, quantity, reason, reference_id, reference_type, user_id)
+        VALUES (item.product_id, item.batch_id, 'OUT', item.quantity,
+          'Bon de livraison ' || COALESCE(NEW.document_number, NEW.id::text),
+          NEW.id, 'delivery_note', NEW.validated_by);
+      END LOOP;
+    END IF;
+    NEW.validated_at := now();
+  END IF;
+
+  IF OLD.type = 'bon_livraison' AND OLD.status = 'approved' AND NEW.status = 'rejected' THEN
+    IF linked_invoice IS NULL THEN
+      FOR item IN
+        SELECT * FROM document_items
+        WHERE document_id = NEW.id AND product_id IS NOT NULL
+      LOOP
+        INSERT INTO stock_movements (product_id, batch_id, type, quantity, reason, reference_id, reference_type, user_id)
+        VALUES (item.product_id, item.batch_id, 'IN', item.quantity,
+          'Annulation BL ' || COALESCE(NEW.document_number, NEW.id::text),
+          NEW.id, 'delivery_note_cancel', NEW.validated_by);
+      END LOOP;
+    END IF;
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+CREATE INDEX IF NOT EXISTS idx_product_batches_quality ON product_batches(quality_status);
+CREATE INDEX IF NOT EXISTS idx_quality_checks_batch ON quality_checks(batch_id);
+CREATE INDEX IF NOT EXISTS idx_quality_checks_created ON quality_checks(created_at DESC);
+
+
+-- ─────────────────────────────────────────────────────
+-- 12e. INVENTAIRE / CONDITIONNEMENTS
+-- ─────────────────────────────────────────────────────
+-- Inventaire physique par lot + conditionnements produit (unité de base).
+-- ADJUST applique un écart signé (réel − théorique) sur produit et lot.
+-- À exécuter sur une base déjà déployée.
+
+CREATE OR REPLACE FUNCTION update_product_quantity()
+RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF NEW.type = 'IN' THEN
+    UPDATE products SET quantity = quantity + NEW.quantity WHERE id = NEW.product_id;
+    IF NEW.batch_id IS NOT NULL THEN
+      UPDATE product_batches SET quantity = quantity + NEW.quantity WHERE id = NEW.batch_id;
+    END IF;
+  ELSIF NEW.type = 'OUT' THEN
+    UPDATE products SET quantity = quantity - NEW.quantity WHERE id = NEW.product_id;
+    IF NEW.batch_id IS NOT NULL THEN
+      UPDATE product_batches SET quantity = quantity - NEW.quantity WHERE id = NEW.batch_id;
+    END IF;
+  ELSIF NEW.type = 'ADJUST' THEN
+    UPDATE products SET quantity = quantity + NEW.quantity WHERE id = NEW.product_id;
+    IF NEW.batch_id IS NOT NULL THEN
+      UPDATE product_batches SET quantity = quantity + NEW.quantity WHERE id = NEW.batch_id;
+    END IF;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+CREATE TABLE IF NOT EXISTS product_units (
+  id uuid DEFAULT uuid_generate_v4() PRIMARY KEY,
+  product_id uuid REFERENCES products(id) ON DELETE CASCADE NOT NULL,
+  unit text NOT NULL,
+  factor numeric NOT NULL CHECK (factor > 0),
+  UNIQUE (product_id, unit)
+);
+
+CREATE TABLE IF NOT EXISTS inventory_sessions (
+  id uuid DEFAULT uuid_generate_v4() PRIMARY KEY,
+  session_number text UNIQUE NOT NULL,
+  status text NOT NULL DEFAULT 'draft'
+    CHECK (status IN ('draft', 'approved', 'cancelled')),
+  notes text,
+  created_by uuid REFERENCES profiles(id) ON DELETE SET NULL,
+  validated_by uuid REFERENCES profiles(id) ON DELETE SET NULL,
+  validated_at timestamptz,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS inventory_lines (
+  id uuid DEFAULT uuid_generate_v4() PRIMARY KEY,
+  session_id uuid REFERENCES inventory_sessions(id) ON DELETE CASCADE NOT NULL,
+  product_id uuid REFERENCES products(id) ON DELETE SET NULL,
+  batch_id uuid REFERENCES product_batches(id) ON DELETE SET NULL,
+  name text NOT NULL,
+  batch_number text,
+  unit text DEFAULT 'kg',
+  theoretical numeric NOT NULL DEFAULT 0,
+  counted numeric NOT NULL DEFAULT 0,
+  entry_quantity numeric,
+  entry_unit text,
+  sort_order integer DEFAULT 0
+);
+
+ALTER TABLE product_units ENABLE ROW LEVEL SECURITY;
+ALTER TABLE inventory_sessions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE inventory_lines ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS product_units_all ON product_units;
+DROP POLICY IF EXISTS inventory_sessions_all ON inventory_sessions;
+DROP POLICY IF EXISTS inventory_lines_all ON inventory_lines;
+CREATE POLICY "product_units_all" ON product_units FOR ALL USING (auth.role() = 'authenticated');
+CREATE POLICY "inventory_sessions_all" ON inventory_sessions FOR ALL USING (auth.role() = 'authenticated');
+CREATE POLICY "inventory_lines_all" ON inventory_lines FOR ALL USING (auth.role() = 'authenticated');
+
+CREATE UNIQUE INDEX IF NOT EXISTS inventory_lines_session_batch
+  ON inventory_lines (session_id, batch_id) WHERE batch_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS inventory_lines_session_unbatched
+  ON inventory_lines (session_id, product_id) WHERE batch_id IS NULL;
+
+CREATE OR REPLACE FUNCTION generate_inventory_number()
+RETURNS text LANGUAGE plpgsql AS $$
+DECLARE
+  current_year text;
+  count_this_year integer;
+BEGIN
+  current_year := to_char(now(), 'YYYY');
+  SELECT count(*) INTO count_this_year
+  FROM inventory_sessions
+  WHERE session_number LIKE 'INV-' || current_year || '-%';
+  RETURN 'INV-' || current_year || '-' || lpad((count_this_year + 1)::text, 4, '0');
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION generate_inventory_number() TO authenticated;
+
+CREATE OR REPLACE FUNCTION process_inventory_validation()
+RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+  item record;
+  v_delta numeric;
+BEGIN
+  IF OLD.status = 'draft' AND NEW.status = 'approved' THEN
+    FOR item IN
+      SELECT * FROM inventory_lines
+      WHERE session_id = NEW.id
+      ORDER BY sort_order
+    LOOP
+      v_delta := COALESCE(item.counted, item.theoretical) - item.theoretical;
+      IF v_delta = 0 THEN
+        CONTINUE;
+      END IF;
+      INSERT INTO stock_movements (product_id, batch_id, type, quantity, reason, reference_id, reference_type, user_id)
+      VALUES (item.product_id, item.batch_id, 'ADJUST', v_delta,
+        'Inventaire ' || NEW.session_number, NEW.id, 'inventory', NEW.validated_by);
+    END LOOP;
+    NEW.validated_at := now();
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS on_inventory_status_change ON inventory_sessions;
+CREATE TRIGGER on_inventory_status_change
+  BEFORE UPDATE ON inventory_sessions
+  FOR EACH ROW EXECUTE FUNCTION process_inventory_validation();
+
+CREATE INDEX IF NOT EXISTS idx_product_units_product ON product_units(product_id);
+CREATE INDEX IF NOT EXISTS idx_inventory_sessions_status ON inventory_sessions(status);
+CREATE INDEX IF NOT EXISTS idx_inventory_lines_session ON inventory_lines(session_id);
+
 
 -- ─────────────────────────────────────────────────────
 -- 13. STORAGE BUCKETS (exécuter via Dashboard Supabase

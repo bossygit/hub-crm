@@ -46,7 +46,7 @@ export default function InvoiceDetailPage() {
     setLoading(true)
     const [{ data: inv }, { data: it }, { data: pay }] = await Promise.all([
       supabase.from('invoices').select('*, client:clients(*), creator:profiles!invoices_created_by_fkey(full_name)').eq('id', id).single(),
-      supabase.from('invoice_items').select('*, product:products(name,unit)').eq('invoice_id', id).order('sort_order'),
+      supabase.from('invoice_items').select('*, product:products(name,unit), batch:product_batches(batch_number,expiry_date)').eq('invoice_id', id).order('sort_order'),
       supabase.from('invoice_payments').select('*').eq('invoice_id', id).order('payment_date', { ascending: false }),
     ])
     setInvoice(inv)
@@ -307,7 +307,7 @@ ${payment.notes ? `<div style="padding:12px 16px;background:#f8f5ee;border-radiu
     <tbody>
       ${items.map((it: any) => `
       <tr class="invoice-pdf__item-row">
-        <td class="invoice-pdf__item-cell invoice-pdf__item-cell--designation"><div class="item-name invoice-pdf__item-name">${it.name}</div>${it.description ? `<div class="item-desc invoice-pdf__item-desc">${it.description}</div>` : ''}</td>
+        <td class="invoice-pdf__item-cell invoice-pdf__item-cell--designation"><div class="item-name invoice-pdf__item-name">${it.name}</div>${it.description ? `<div class="item-desc invoice-pdf__item-desc">${it.description}</div>` : ''}${it.batch?.batch_number ? `<div class="item-desc invoice-pdf__item-desc">Lot ${it.batch.batch_number}</div>` : ''}</td>
         <td class="invoice-pdf__item-cell invoice-pdf__item-cell--qty">${it.quantity}</td>
         <td class="invoice-pdf__item-cell invoice-pdf__item-cell--unit">${it.unit || '—'}</td>
         <td class="invoice-pdf__item-cell invoice-pdf__item-cell--unit-price">${Number(it.unit_price).toLocaleString('fr-FR', { maximumFractionDigits: 0 })} FCFA</td>
@@ -552,6 +552,7 @@ ${payment.notes ? `<div style="padding:12px 16px;background:#f8f5ee;border-radiu
                         <div style={{ fontWeight: 600 }}>{it.name}</div>
                         {it.description && <div style={{ fontSize: '0.75rem', color: '#999' }}>{it.description}</div>}
                         {it.product?.name && it.product.name !== it.name && <div style={{ fontSize: '0.72rem', color: '#aaa' }}>Produit: {it.product.name}</div>}
+                        {it.batch?.batch_number && <div style={{ fontSize: '0.75rem', color: '#065f46' }}>Lot {it.batch.batch_number}</div>}
                       </td>
                       <td className="invoice-detail-items-table__cell invoice-detail-items-table__cell--qty" style={{ fontWeight: 700 }}>{it.quantity}</td>
                       <td className="invoice-detail-items-table__cell invoice-detail-items-table__cell--unit" style={{ color: '#666' }}>{it.unit || '—'}</td>

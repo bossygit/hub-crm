@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
-import appIcon from '../../assets/images/app-icon.png'
+import { homeForRole } from '@/lib/auth/access'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -21,9 +21,19 @@ export default function LoginPage() {
     if (error) {
       setError('Email ou mot de passe incorrect')
       setLoading(false)
-    } else {
-      router.push('/dashboard')
+      return
     }
+    const { data: { user } } = await supabase.auth.getUser()
+    let role: string | undefined
+    if (user) {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', user.id)
+        .single()
+      role = profile?.role
+    }
+    router.push(homeForRole(role))
   }
 
   return (
@@ -82,10 +92,7 @@ export default function LoginPage() {
         </form>
 
         <div style={{ textAlign: 'center', marginTop: 24, color: '#666', fontSize: '0.8rem' }}>
-          Vous n&apos;avez pas de compte ?{' '}
-          <a href="/register" style={{ color: 'var(--hub-green-mid)', fontWeight: 600 }}>
-            S&apos;inscrire
-          </a>
+          Accès interne : compte créé par un administrateur.
         </div>
 
         <div style={{ marginTop: 32, paddingTop: 20, borderTop: '1px solid #eee', textAlign: 'center' }}>

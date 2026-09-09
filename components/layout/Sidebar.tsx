@@ -29,8 +29,12 @@ const nav: { section: string; items: NavItem[]; roles?: UserRole[] }[] = [
       { href: '/quotes', icon: '📝', label: 'Devis' },
       { href: '/invoices', icon: '🧾', label: 'Facturation' },
       { href: '/delivery-notes', icon: '🚚', label: 'Bons de Livraison' },
-      { href: '/sales', icon: '💰', label: 'Commandes / Ventes' },
+      { href: '/purchases', icon: '🛒', label: 'Achats & réception' },
+      { href: '/production', icon: '🏭', label: 'Production' },
       { href: '/stock', icon: '📦', label: 'Gestion de Stock' },
+      { href: '/stock/inventory', icon: '📋', label: 'Inventaire' },
+      { href: '/stock/recall', icon: '🔎', label: 'Traçabilité lots' },
+      { href: '/quality', icon: '🧪', label: 'Qualité' },
       { href: '/clients', icon: '👥', label: 'Clients & Partenaires' },
     ]
   },
@@ -102,19 +106,29 @@ export default function Sidebar() {
         {nav.filter(group => isVisible(group)).map(group => (
           <div key={group.section}>
             <div className="nav-section">{group.section}</div>
-            {group.items.filter(item => isVisible(item)).map(item => (
+            {group.items.filter(item => isVisible(item)).map(item => {
+              const hrefs = group.items.map(i => i.href)
+              const exact = pathname === item.href
+              const nested = pathname.startsWith(item.href + '/')
+              const longerMatch = hrefs.some(other =>
+                other !== item.href && other.length > item.href.length &&
+                (pathname === other || pathname.startsWith(other + '/'))
+              )
+              const active = exact || (nested && !longerMatch)
+              return (
               <Link
                 key={item.href}
                 href={item.href}
                 target={item.external ? '_blank' : undefined}
-                className={`nav-item ${pathname === item.href || pathname.startsWith(item.href + '/') ? 'active' : ''}`}
+                className={`nav-item ${active ? 'active' : ''}`}
                 style={{ textDecoration: 'none' }}
               >
                 <span style={{ fontSize: '1rem' }}>{item.icon}</span>
                 <span>{item.label}</span>
                 {item.external && <span style={{ marginLeft: 'auto', fontSize: '0.65rem', opacity: 0.5 }}>↗</span>}
               </Link>
-            ))}
+              )
+            })}
           </div>
         ))}
       </nav>

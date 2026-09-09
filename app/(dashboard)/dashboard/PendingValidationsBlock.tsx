@@ -39,11 +39,13 @@ export default function PendingValidationsBlock() {
         { count: blCount },
         { count: quoteCount },
         { count: leaveCount },
+        { count: qcCount },
       ] = await Promise.all([
         supabase.from('invoices').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
         supabase.from('documents').select('*', { count: 'exact', head: true }).eq('type', 'bon_livraison').eq('status', 'pending'),
         supabase.from('documents').select('*', { count: 'exact', head: true }).eq('type', 'devis').eq('status', 'pending'),
         supabase.from('employee_documents').select('*', { count: 'exact', head: true }).eq('type', 'conge').eq('status', 'pending'),
+        supabase.from('product_batches').select('*', { count: 'exact', head: true }).eq('quality_status', 'pending'),
       ])
 
       setGroups([
@@ -51,6 +53,7 @@ export default function PendingValidationsBlock() {
         { label: 'Bons de livraison', icon: '🚚', count: blCount ?? 0, link: '/delivery-notes?status=pending', color: '#059669' },
         { label: 'Devis', icon: '📝', count: quoteCount ?? 0, link: '/quotes?status=pending', color: '#7c3aed' },
         { label: 'Demandes de conge', icon: '🏖', count: leaveCount ?? 0, link: '/hr/leaves', color: '#ea580c' },
+        { label: 'Lots qualité', icon: '🧪', count: qcCount ?? 0, link: '/quality', color: '#b45309' },
       ])
     }
     load()

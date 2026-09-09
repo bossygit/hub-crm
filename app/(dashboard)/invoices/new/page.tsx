@@ -2,13 +2,17 @@
 import { useEffect, useState, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter, useSearchParams } from 'next/navigation'
-import type { Client, Product } from '@/types'
+import type { Client, Product, ProductBatch } from '@/types'
 import { useToast } from '@/components/ui/Toast'
+import { suggestFefoBatch } from '@/lib/stock/traceability'
+import { isLotUsable } from '@/lib/quality/release'
+import { lineInBaseUnit, packsForProduct, unitsForProduct, type ProductPack } from '@/lib/stock/units'
 
 const UNITS = ['kg', 'g', 'L', 'ml', 'carton', 'sac', 'pièce', 'heure', 'forfait', 'unité']
 
 interface LineItem {
   product_id: string | null
+  batch_id: string | null
   name: string
   description: string
   quantity: number
@@ -18,7 +22,7 @@ interface LineItem {
 }
 
 const emptyLine = (): LineItem => ({
-  product_id: null, name: '', description: '',
+  product_id: null, batch_id: null, name: '', description: '',
   quantity: 1, unit: 'kg', unit_price: 0, tax_rate: 18
 })
 
@@ -29,6 +33,8 @@ export default function NewInvoicePage() {
 
   const [clients, setClients] = useState<Client[]>([])
   const [products, setProducts] = useState<Product[]>([])
+  const [batches, setBatches] = useState<ProductBatch[]>([])
+  const [packRows, setPackRows] = useState<(ProductPack & { product_id: string })[]>([])
   const [clientSearch, setClientSearch] = useState('')
   const [showClientDropdown, setShowClientDropdown] = useState(false)
 
@@ -63,16 +69,27 @@ export default function NewInvoicePage() {
   const taxAmount = afterDiscount * form.tax_rate / 100
   const total = afterDiscount + taxAmount
 
+  function toBaseItems(list: LineItem[]) {
+    return list.map(it => {
+      const p = products.find(x => x.id === it.product_id)
+      return lineInBaseUnit(it, p?.unit, packsForProduct(it.product_id, packRows))
+    })
+  }
+
   // ── INIT ──
   useEffect(() => {
     async function init() {
-      const [{ data: c }, { data: p }, { data: numData }] = await Promise.all([
+      const [{ data: c }, { data: p }, { data: b }, { data: numData }, { data: u }] = await Promise.all([
         supabase.from('clients').select('*').order('name'),
         supabase.from('products').select('*').order('name'),
+        supabase.from('product_batches').select('*').order('expiry_date'),
         supabase.rpc('generate_invoice_number'),
+        supabase.from('product_units').select('product_id, unit, factor'),
       ])
       setClients(c || [])
       setProducts(p || [])
+      setBatches(b || [])
+      setPackRows((u || []) as (ProductPack & { product_id: string })[])
       if (numData) setForm(f => ({ ...f, invoice_number: numData }))
 
       if (duplicateId) {
@@ -94,6 +111,7 @@ export default function NewInvoicePage() {
           if (origItems && origItems.length > 0) {
             setItems(origItems.map((it: any) => ({
               product_id: it.product_id || null,
+              batch_id: it.batch_id || null,
               name: it.name,
               description: it.description || '',
               quantity: it.quantity,
@@ -141,7 +159,7 @@ export default function NewInvoicePage() {
       notes: form.notes, payment_terms: form.payment_terms,
       updated_at: new Date().toISOString(),
     }
-    const validItems = items.filter(it => it.name.trim() && it.quantity > 0)
+    const validItems = toBaseItems(items.filter(it => it.name.trim() && it.quantity > 0))
 
     try {
       if (draftIdRef.current) {
@@ -150,7 +168,7 @@ export default function NewInvoicePage() {
         await supabase.from('invoice_items').delete().eq('invoice_id', draftIdRef.current)
         if (validItems.length > 0) {
           await supabase.from('invoice_items').insert(
-            validItems.map((it, idx) => ({ ...it, invoice_id: draftIdRef.current!, sort_order: idx }))
+            validItems.map((it, idx) => ({ ...it, invoice_id: draftIdRef.current!, sort_order: idx, batch_id: it.batch_id || null }))
           )
         }
       } else {
@@ -164,7 +182,7 @@ export default function NewInvoicePage() {
           draftIdRef.current = newDraft.id // ← mis à jour IMMÉDIATEMENT
           if (validItems.length > 0) {
             await supabase.from('invoice_items').insert(
-              validItems.map((it, idx) => ({ ...it, invoice_id: newDraft.id, sort_order: idx }))
+              validItems.map((it, idx) => ({ ...it, invoice_id: newDraft.id, sort_order: idx, batch_id: it.batch_id || null }))
             )
           }
         }
@@ -179,7 +197,7 @@ export default function NewInvoicePage() {
   // ── SAUVEGARDE PRINCIPALE (boutons) ──
   async function handleSave(targetStatus: 'draft' | 'pending') {
     if (!form.invoice_number) return
-    const validItems = items.filter(it => it.name.trim() && it.quantity > 0 && it.unit_price >= 0)
+    const validItems = toBaseItems(items.filter(it => it.name.trim() && it.quantity > 0 && it.unit_price >= 0))
     if (validItems.length === 0) { toast('warning', 'Ajoutez au moins une ligne avec un nom et une quantité.'); return }
 
     // Annuler l'auto-save en attente + poser le verrou
@@ -229,7 +247,7 @@ export default function NewInvoicePage() {
       // ── Insérer les lignes (après DELETE confirmé OU sur nouvelle facture vide) ──
       const { error: itemsError } = await supabase
         .from('invoice_items')
-        .insert(validItems.map((it, idx) => ({ ...it, invoice_id: invoiceId!, sort_order: idx })))
+        .insert(validItems.map((it, idx) => ({ ...it, invoice_id: invoiceId!, sort_order: idx, batch_id: it.batch_id || null })))
       if (itemsError) throw new Error('Erreur insertion lignes : ' + itemsError.message)
 
       if (targetStatus === 'pending') {
@@ -279,7 +297,9 @@ export default function NewInvoicePage() {
           updated[idx].unit_price = p.price_per_unit || 0
           updated[idx].unit = p.unit || 'kg'
         }
+        updated[idx].batch_id = suggestFefoBatch(batches, String(value))
       }
+      if (field === 'product_id' && !value) updated[idx].batch_id = null
       return updated
     })
   }
@@ -414,6 +434,19 @@ export default function NewInvoicePage() {
                         placeholder="Nom du produit / service..."
                         value={item.name}
                         onChange={e => updateItem(idx, 'name', e.target.value)} />
+                      {item.product_id && (
+                        <select className="hub-select" style={{ marginTop: 4 }}
+                          value={item.batch_id || ''}
+                          onChange={e => updateItem(idx, 'batch_id', e.target.value || null)}>
+                          <option value="">— Lot (optionnel) —</option>
+                          {batches.filter(b => b.product_id === item.product_id && isLotUsable(b)).map(b => (
+                            <option key={b.id} value={b.id}>
+                              {b.batch_number} · {b.quantity} {item.unit}
+                              {b.expiry_date ? ` · exp. ${new Date(b.expiry_date).toLocaleDateString('fr-FR')}` : ''}
+                            </option>
+                          ))}
+                        </select>
+                      )}
                     </div>
                     <input className="hub-input invoice-field invoice-field--line-description"
                       placeholder="Description..."
@@ -426,7 +459,10 @@ export default function NewInvoicePage() {
                       <select className="hub-select invoice-field invoice-field--unit" style={{ marginTop: 4 }}
                         value={item.unit}
                         onChange={e => updateItem(idx, 'unit', e.target.value)}>
-                        {UNITS.map(u => <option key={u}>{u}</option>)}
+                        {(item.product_id
+                          ? unitsForProduct(products.find(p => p.id === item.product_id)?.unit || 'kg', packsForProduct(item.product_id, packRows))
+                          : UNITS
+                        ).map(u => <option key={u}>{u}</option>)}
                       </select>
                     </div>
                     <div className="invoice-line-item__price">

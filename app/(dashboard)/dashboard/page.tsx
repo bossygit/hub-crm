@@ -12,6 +12,7 @@ export default async function DashboardPage() {
     { count: pendingRequests },
     { data: recentMovements },
     { data: recentRequests },
+    { count: pendingQuality },
   ] = await Promise.all([
     supabase.from('clients').select('*', { count: 'exact', head: true }),
     supabase.from('products').select('id, name, quantity, threshold_alert, unit'),
@@ -20,6 +21,7 @@ export default async function DashboardPage() {
     supabase.from('document_requests').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
     supabase.from('stock_movements').select('*, product:products(name)').order('created_at', { ascending: false }).limit(5),
     supabase.from('document_requests').select('*').order('created_at', { ascending: false }).limit(4),
+    supabase.from('product_batches').select('*', { count: 'exact', head: true }).eq('quality_status', 'pending'),
   ])
 
   const lowStock = (products || []).filter(p => p.quantity <= p.threshold_alert)
@@ -65,6 +67,11 @@ export default async function DashboardPage() {
             <div style={{ fontSize: '1.5rem', marginBottom: 8 }}>📬</div>
             <div className="stat-value">{pendingRequests ?? 0}</div>
             <div className="stat-label">Demandes en attente</div>
+          </div>
+          <div className="stat-card amber">
+            <div style={{ fontSize: '1.5rem', marginBottom: 8 }}>🧪</div>
+            <div className="stat-value">{pendingQuality ?? 0}</div>
+            <div className="stat-label">Lots en quarantaine</div>
           </div>
         </div>
 

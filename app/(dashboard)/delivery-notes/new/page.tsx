@@ -2,12 +2,15 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter, useSearchParams } from 'next/navigation'
-import type { Client, Product } from '@/types'
+import type { Client, Product, ProductBatch } from '@/types'
 import { useToast } from '@/components/ui/Toast'
+import { suggestFefoBatch } from '@/lib/stock/traceability'
+import { isLotUsable } from '@/lib/quality/release'
+import { lineInBaseUnit, packsForProduct, unitsForProduct, type ProductPack } from '@/lib/stock/units'
 
 const UNITS = ['kg', 'g', 'L', 'ml', 'carton', 'sac', 'pièce', 'heure', 'forfait', 'unité']
-interface LineItem { product_id: string | null; name: string; description: string; quantity: number; unit: string; unit_price: number }
-const emptyLine = (): LineItem => ({ product_id: null, name: '', description: '', quantity: 1, unit: 'kg', unit_price: 0 })
+interface LineItem { product_id: string | null; batch_id: string | null; name: string; description: string; quantity: number; unit: string; unit_price: number }
+const emptyLine = (): LineItem => ({ product_id: null, batch_id: null, name: '', description: '', quantity: 1, unit: 'kg', unit_price: 0 })
 
 export default function NewDeliveryNotePage() {
   const router = useRouter()
@@ -16,6 +19,8 @@ export default function NewDeliveryNotePage() {
 
   const [clients, setClients] = useState<Client[]>([])
   const [products, setProducts] = useState<Product[]>([])
+  const [batches, setBatches] = useState<ProductBatch[]>([])
+  const [packRows, setPackRows] = useState<(ProductPack & { product_id: string })[]>([])
   const [clientSearch, setClientSearch] = useState('')
   const [showClientDropdown, setShowClientDropdown] = useState(false)
   const [form, setForm] = useState({ title: '', client_id: '', client_name: '', invoice_id: invoiceId || '', invoice_number: '', notes: '' })
@@ -26,12 +31,16 @@ export default function NewDeliveryNotePage() {
 
   useEffect(() => {
     async function init() {
-      const [{ data: c }, { data: p }] = await Promise.all([
+      const [{ data: c }, { data: p }, { data: b }, { data: u }] = await Promise.all([
         supabase.from('clients').select('*').order('name'),
         supabase.from('products').select('*').order('name'),
+        supabase.from('product_batches').select('*').order('expiry_date'),
+        supabase.from('product_units').select('product_id, unit, factor'),
       ])
       setClients(c || [])
       setProducts(p || [])
+      setBatches(b || [])
+      setPackRows((u || []) as (ProductPack & { product_id: string })[])
 
       if (invoiceId) {
         const [{ data: inv }, { data: invItems }] = await Promise.all([
@@ -42,7 +51,7 @@ export default function NewDeliveryNotePage() {
           setForm(f => ({ ...f, client_id: inv.client_id || '', client_name: (inv.client as any)?.name || '', invoice_id: inv.id, invoice_number: inv.invoice_number, title: `BL — ${inv.invoice_number}` }))
           setClientSearch((inv.client as any)?.name || '')
           if (invItems && invItems.length > 0) {
-            setItems(invItems.map((it: any) => ({ product_id: it.product_id || null, name: it.name, description: it.description || '', quantity: it.quantity, unit: it.unit || 'kg', unit_price: it.unit_price })))
+            setItems(invItems.map((it: any) => ({ product_id: it.product_id || null, batch_id: it.batch_id || null, name: it.name, description: it.description || '', quantity: it.quantity, unit: it.unit || 'kg', unit_price: it.unit_price })))
           }
         }
       }
@@ -51,7 +60,10 @@ export default function NewDeliveryNotePage() {
   }, [invoiceId])
 
   async function handleSave(targetStatus: 'draft' | 'pending') {
-    const validItems = items.filter(it => it.name.trim() && it.quantity > 0)
+    const validItems = items.filter(it => it.name.trim() && it.quantity > 0).map(it => {
+      const p = products.find(x => x.id === it.product_id)
+      return lineInBaseUnit(it, p?.unit, packsForProduct(it.product_id, packRows))
+    })
     if (validItems.length === 0) { toast('warning', 'Ajoutez au moins une ligne.'); return }
     setSaving(true)
     try {
@@ -69,7 +81,7 @@ export default function NewDeliveryNotePage() {
       }).select('id').single()
       if (error || !doc) throw new Error(error?.message || 'Erreur')
       await supabase.from('document_items').insert(
-        validItems.map((it, idx) => ({ ...it, document_id: doc.id, sort_order: idx }))
+        validItems.map((it, idx) => ({ ...it, document_id: doc.id, sort_order: idx, batch_id: it.batch_id || null }))
       )
 
       if (targetStatus === 'pending') {
@@ -99,7 +111,12 @@ export default function NewDeliveryNotePage() {
   function updateItem(idx: number, field: keyof LineItem, value: string | number | null) {
     setItems(prev => {
       const u = [...prev]; u[idx] = { ...u[idx], [field]: value }
-      if (field === 'product_id' && value) { const p = products.find(pr => pr.id === value); if (p) { u[idx].name = p.name; u[idx].unit_price = p.price_per_unit || 0; u[idx].unit = p.unit || 'kg' } }
+      if (field === 'product_id' && value) {
+        const p = products.find(pr => pr.id === value)
+        if (p) { u[idx].name = p.name; u[idx].unit_price = p.price_per_unit || 0; u[idx].unit = p.unit || 'kg' }
+        u[idx].batch_id = suggestFefoBatch(batches, String(value))
+      }
+      if (field === 'product_id' && !value) u[idx].batch_id = null
       return u
     })
   }
@@ -184,11 +201,25 @@ export default function NewDeliveryNotePage() {
                         {products.map(p => <option key={p.id} value={p.id}>{p.name} ({p.unit})</option>)}
                       </select>
                       <input className="hub-input" style={{ marginTop: 4 }} placeholder="Nom..." value={item.name} onChange={e => updateItem(idx, 'name', e.target.value)} />
+                      {item.product_id && (
+                        <select className="hub-select" style={{ marginTop: 4 }} value={item.batch_id || ''} onChange={e => updateItem(idx, 'batch_id', e.target.value || null)}>
+                          <option value="">— Lot (optionnel) —</option>
+                          {batches.filter(b => b.product_id === item.product_id && isLotUsable(b)).map(b => (
+                            <option key={b.id} value={b.id}>
+                              {b.batch_number} · {b.quantity}
+                              {b.expiry_date ? ` · exp. ${new Date(b.expiry_date).toLocaleDateString('fr-FR')}` : ''}
+                            </option>
+                          ))}
+                        </select>
+                      )}
                     </div>
                     <input className="hub-input" placeholder="Description..." value={item.description} onChange={e => updateItem(idx, 'description', e.target.value)} />
                     <input className="hub-input" type="number" min={0} step="0.01" value={item.quantity} onChange={e => updateItem(idx, 'quantity', parseFloat(e.target.value) || 0)} />
                     <select className="hub-select" value={item.unit} onChange={e => updateItem(idx, 'unit', e.target.value)}>
-                      {UNITS.map(u => <option key={u}>{u}</option>)}
+                      {(item.product_id
+                        ? unitsForProduct(products.find(p => p.id === item.product_id)?.unit || 'kg', packsForProduct(item.product_id, packRows))
+                        : UNITS
+                      ).map(u => <option key={u}>{u}</option>)}
                     </select>
                     <button type="button" onClick={() => removeLine(idx)} disabled={items.length === 1}
                       style={{ background: items.length === 1 ? '#f0ece4' : '#fee2e2', border: 'none', color: items.length === 1 ? '#ccc' : '#dc2626', borderRadius: 6, padding: '6px 10px', cursor: items.length === 1 ? 'not-allowed' : 'pointer' }}>✕</button>

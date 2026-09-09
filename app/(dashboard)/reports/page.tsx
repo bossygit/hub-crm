@@ -1,13 +1,15 @@
 import { createClient } from '@/lib/supabase/server'
+import { computeInvoiceRevenue } from '@/lib/reports/revenue'
 
 export default async function ReportsPage() {
   const supabase = await createClient()
 
   const now = new Date()
-  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
+  const startOfMonthIso = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
+  const startOfMonthDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
 
   const [
-    { data: salesData },
+    { data: invoicesData },
     { data: products },
     { data: batches },
     { data: movements },
@@ -15,21 +17,27 @@ export default async function ReportsPage() {
     { data: pendingDocs },
     { count: pendingRequests },
   ] = await Promise.all([
-    supabase.from('sales').select('status, total_amount, tax_amount, created_at, client:clients(name)'),
+    supabase.from('invoices').select('status, subtotal, discount, tax_amount, total, date'),
     supabase.from('products').select('id, name, quantity, threshold_alert, unit, price_per_unit'),
     supabase.from('product_batches').select('product_id, quantity, expiry_date, product:products(name)'),
-    supabase.from('stock_movements').select('type, quantity, created_at').gte('created_at', startOfMonth),
+    supabase.from('stock_movements').select('type, quantity, created_at').gte('created_at', startOfMonthIso),
     supabase.from('employees').select('*', { count: 'exact', head: true }).eq('status', 'actif'),
     supabase.from('documents').select('id, title, type, status, created_at').eq('status', 'pending'),
     supabase.from('document_requests').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
   ])
 
-  const approvedSales = (salesData || []).filter(s => s.status === 'approved')
-  const pendingSales = (salesData || []).filter(s => s.status === 'pending')
-  const totalCA = approvedSales.reduce((s, sale) => s + Number(sale.total_amount || 0), 0)
-  const totalTVA = approvedSales.reduce((s, sale) => s + Number(sale.tax_amount || 0), 0)
-  const monthSales = approvedSales.filter(s => s.created_at >= startOfMonth)
-  const monthCA = monthSales.reduce((s, sale) => s + Number(sale.total_amount || 0) + Number(sale.tax_amount || 0), 0)
+  const { cumulativeHt: totalCA, monthTtc: monthCA, collectedVat: totalTVA, pendingCount: pendingInvoices } =
+    computeInvoiceRevenue(
+      (invoicesData || []).map(inv => ({
+        status: inv.status,
+        subtotal: Number(inv.subtotal || 0),
+        discount: Number(inv.discount || 0),
+        tax_amount: Number(inv.tax_amount || 0),
+        total: Number(inv.total || 0),
+        date: inv.date,
+      })),
+      startOfMonthDate,
+    )
 
   const lowStock = (products || []).filter(p => p.quantity <= p.threshold_alert)
   const today = new Date().toISOString().split('T')[0]
@@ -73,8 +81,8 @@ export default async function ReportsPage() {
           </div>
           <div className="stat-card amber">
             <div style={{ fontSize: '1.2rem', marginBottom: 6 }}>⏳</div>
-            <div className="stat-value">{pendingSales.length}</div>
-            <div className="stat-label">Ventes en validation</div>
+            <div className="stat-value">{pendingInvoices}</div>
+            <div className="stat-label">Factures en validation</div>
           </div>
           <div className="stat-card green">
             <div style={{ fontSize: '1.2rem', marginBottom: 6 }}>📦</div>

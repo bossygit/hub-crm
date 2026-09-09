@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test": "node --experimental-strip-types --test lib/reports/revenue.test.ts lib/stock/stockExit.test.ts lib/auth/access.test.ts lib/stock/traceability.test.ts lib/purchases/receipt.test.ts lib/production/bom.test.ts lib/quality/release.test.ts lib/stock/units.test.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.4.0",

@@ -231,8 +231,10 @@ export default function AdminUsersPage() {
         </div>
 
         <div style={{ marginTop: 24, padding: 16, background: '#fffbeb', borderRadius: 10, border: '1px solid #fbbf24', fontSize: '0.85rem', color: '#92400e' }}>
-          <strong>Note :</strong> Seuls les utilisateurs avec le rôle CEO ou Admin peuvent accéder à cette page.
-          Le changement de rôle prend effet immédiatement. L&apos;utilisateur devra recharger la page pour voir ses nouvelles permissions.
+          <strong>Note :</strong> Seuls CEO et Admin accèdent à cette page.
+          Le rôle <strong>partenaire</strong> n’ouvre que le portail public.
+          L’inscription publique <code>/register</code> est fermée dès qu’un profil existe.
+          Créez les comptes suivants dans Supabase Authentication, puis assignez le rôle ici.
         </div>
       </div>
     </div>

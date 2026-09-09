@@ -42,12 +42,10 @@ RESEND_API_KEY=re_votre-cle-resend
 
 ### 5. Créer le premier administrateur
 
-Après inscription du premier utilisateur :
-
-```sql
-UPDATE profiles SET role = 'ceo', can_validate_invoices = true
-WHERE full_name = 'Nom Du Dirigeant';
-```
+1. Exécuter `fix-first-user-admin.sql` si la base existait déjà (inclus dans `setup.sql` pour une install neuve)
+2. Aller sur `/register` **tant qu’aucun profil n’existe** — le premier compte devient `admin`
+3. Dans Authentication → Providers → Email : désactiver **Allow new users to sign up**
+4. Pour un CEO ensuite : `UPDATE profiles SET role = 'ceo' WHERE ...`
 
 ## Structure des rôles
 

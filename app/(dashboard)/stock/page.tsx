@@ -1,6 +1,8 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
+import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
+import { isLotUsable, QUALITY_LABELS } from '@/lib/quality/release'
 
 const categories = ['Céréales transformées','Huiles & graisses','Légumineuses','Boissons','Légumes transformés','Viandes & poissons','Autres']
 const units = ['kg','g','L','ml','carton','sac','tonne','pièce']
@@ -23,6 +25,7 @@ export default function StockPage() {
   const [movType, setMovType] = useState<'IN'|'OUT'>('IN')
   const [movForm, setMovForm] = useState({ product_id:'', batch_id:'', quantity:0, reason:'', date:new Date().toISOString().split('T')[0] })
   const [saving, setSaving] = useState(false)
+  const [productPacks, setProductPacks] = useState<{ unit: string; factor: number }[]>([])
   const supabase = createClient()
 
   const load = useCallback(async () => {
@@ -40,9 +43,22 @@ export default function StockPage() {
 
   async function saveProduct(e: React.FormEvent) {
     e.preventDefault(); setSaving(true)
+    let productId = editingProduct?.id
     if (editingProduct) await supabase.from('products').update(productForm).eq('id', editingProduct.id)
-    else await supabase.from('products').insert(productForm)
-    setSaving(false); setShowProductModal(false); load()
+    else {
+      const { data } = await supabase.from('products').insert(productForm).select('id').single()
+      productId = data?.id
+    }
+    if (productId) {
+      await supabase.from('product_units').delete().eq('product_id', productId)
+      const validPacks = productPacks.filter(p => p.unit.trim() && Number(p.factor) > 0 && p.unit !== productForm.unit)
+      if (validPacks.length > 0) {
+        await supabase.from('product_units').insert(validPacks.map(p => ({
+          product_id: productId, unit: p.unit.trim(), factor: Number(p.factor),
+        })))
+      }
+    }
+    setSaving(false); setShowProductModal(false); setProductPacks([]); load()
   }
 
   async function saveBatch(e: React.FormEvent) {
@@ -78,7 +94,9 @@ export default function StockPage() {
     const diff = (new Date(b.expiry_date).getTime() - Date.now()) / (1000*60*60*24)
     return diff >= 0 && diff <= 30
   })
-  const productBatches = batches.filter(b => b.product_id === movForm.product_id && b.quantity > 0)
+  const productBatches = batches.filter(b =>
+    b.product_id === movForm.product_id && (movType === 'OUT' ? isLotUsable(b) : b.quantity > 0)
+  )
 
   function printStockBon(m: any) {
     const isIn = m.type === 'IN'
@@ -123,8 +141,10 @@ ${m.reason ? `<div style="padding:14px 18px;background:#f8f5ee;border-radius:8px
         <h2>📦 Gestion de Stock</h2>
         <div style={{ display:'flex', gap:10 }}>
           <button className="btn-ghost" onClick={() => { setMovType('OUT'); setMovForm({product_id:'',batch_id:'',quantity:0,reason:'',date:new Date().toISOString().split('T')[0]}); setShowMovModal(true) }}>↓ Sortie</button>
+          <Link href="/stock/inventory" className="btn-ghost" style={{ textDecoration: 'none' }}>📋 Inventaire</Link>
+          <Link href="/stock/recall" className="btn-ghost" style={{ textDecoration: 'none' }}>🔎 Traçabilité</Link>
           <button className="btn-primary" onClick={() => { setMovType('IN'); setMovForm({product_id:'',batch_id:'',quantity:0,reason:'',date:new Date().toISOString().split('T')[0]}); setShowMovModal(true) }}>↑ Entrée</button>
-          <button className="btn-amber" onClick={() => { setEditingProduct(null); setProductForm(emptyProduct); setShowProductModal(true) }}>+ Produit</button>
+          <button className="btn-amber" onClick={() => { setEditingProduct(null); setProductForm(emptyProduct); setProductPacks([]); setShowProductModal(true) }}>+ Produit</button>
         </div>
       </div>
 
@@ -174,9 +194,11 @@ ${m.reason ? `<div style="padding:14px 18px;background:#f8f5ee;border-radius:8px
                         <td>{isLow ? <span className="badge badge-red">⚠️ Bas</span> : <span className="badge badge-green">✓ OK</span>}</td>
                         <td>
                           <div style={{display:'flex',gap:6}}>
-                            <button className="btn-ghost" style={{padding:'5px 10px',fontSize:'0.75rem'}} onClick={() => {
+                            <button className="btn-ghost" style={{padding:'5px 10px',fontSize:'0.75rem'}} onClick={async () => {
                               setEditingProduct(p)
                               setProductForm({name:p.name,category:p.category,quantity:p.quantity,unit:p.unit,threshold_alert:p.threshold_alert,price_per_unit:p.price_per_unit||0,description:p.description||''})
+                              const { data } = await supabase.from('product_units').select('unit, factor').eq('product_id', p.id)
+                              setProductPacks((data || []).map(r => ({ unit: r.unit, factor: Number(r.factor) })))
                               setShowProductModal(true)
                             }}>✏️</button>
                             <button className="btn-amber" style={{padding:'5px 10px',fontSize:'0.75rem'}} onClick={() => {
@@ -198,7 +220,7 @@ ${m.reason ? `<div style="padding:14px 18px;background:#f8f5ee;border-radius:8px
           <div style={{ background:'white', borderRadius:12, border:'1px solid #e8e4db', overflow:'hidden' }}>
             <table className="hub-table">
               <thead>
-                <tr><th>Produit</th><th>N° Lot</th><th>Quantité</th><th>Production</th><th>Péremption</th><th>Fournisseur</th><th>Statut</th></tr>
+                <tr><th>Produit</th><th>N° Lot</th><th>Quantité</th><th>Production</th><th>Péremption</th><th>Fournisseur</th><th>Statut</th><th></th></tr>
               </thead>
               <tbody>
                 {batches.map(b => {
@@ -221,15 +243,27 @@ ${m.reason ? `<div style="padding:14px 18px;background:#f8f5ee;border-radius:8px
                       </td>
                       <td style={{color:'#666'}}>{b.supplier || '—'}</td>
                       <td>
-                        {isExpired && b.quantity > 0 ? <span className="badge badge-red">⛔ Expiré</span>
+                        {b.quality_status === 'pending' || b.quality_status === 'rejected' ? (
+                          <span className={`badge ${QUALITY_LABELS[b.quality_status].badge}`}>
+                            {QUALITY_LABELS[b.quality_status].icon} {QUALITY_LABELS[b.quality_status].label}
+                          </span>
+                        ) : isExpired && b.quantity > 0 ? <span className="badge badge-red">⛔ Expiré</span>
                           : isSoon && b.quantity > 0 ? <span className="badge badge-amber">⚠ Bientôt</span>
                           : b.quantity <= 0 ? <span className="badge badge-gray">Vide</span>
                           : <span className="badge badge-green">✓ OK</span>}
                       </td>
+                      <td>
+                        <span style={{ display: 'flex', gap: 4 }}>
+                          {b.quality_status === 'pending' && (
+                            <Link href="/quality" className="btn-ghost" style={{ padding: '4px 10px', fontSize: '0.72rem', textDecoration: 'none' }}>🧪</Link>
+                          )}
+                          <Link href={`/stock/recall?id=${b.id}`} className="btn-ghost" style={{ padding: '4px 10px', fontSize: '0.72rem', textDecoration: 'none' }}>🔎</Link>
+                        </span>
+                      </td>
                     </tr>
                   )
                 })}
-                {batches.length === 0 && <tr><td colSpan={7} style={{textAlign:'center',padding:40,color:'#999'}}>Aucun lot — ajoutez des lots depuis la liste des produits</td></tr>}
+                {batches.length === 0 && <tr><td colSpan={8} style={{textAlign:'center',padding:40,color:'#999'}}>Aucun lot — ajoutez des lots depuis la liste des produits</td></tr>}
               </tbody>
             </table>
           </div>
@@ -284,6 +318,15 @@ ${m.reason ? `<div style="padding:14px 18px;background:#f8f5ee;border-radius:8px
                 <div className="hub-form-group"><label>Seuil d&apos;alerte</label><input className="hub-input" type="number" min={0} value={productForm.threshold_alert} onChange={e => setProductForm({...productForm,threshold_alert:Number(e.target.value)})} /></div>
                 <div className="hub-form-group" style={{gridColumn:'1/-1'}}><label>Prix unitaire (FCFA)</label><input className="hub-input" type="number" min={0} value={productForm.price_per_unit} onChange={e => setProductForm({...productForm,price_per_unit:Number(e.target.value)})} /></div>
               </div>
+              <div style={{ marginTop: 14, fontWeight: 700, fontSize: '0.75rem', color: 'var(--hub-green)', textTransform: 'uppercase' }}>Conditionnements (vers {productForm.unit})</div>
+              {productPacks.map((pack, idx) => (
+                <div key={idx} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 8, marginTop: 8 }}>
+                  <input className="hub-input" placeholder="sac, carton…" value={pack.unit} onChange={e => setProductPacks(prev => { const u = [...prev]; u[idx] = { ...u[idx], unit: e.target.value }; return u })} />
+                  <input className="hub-input" type="number" min={0.0001} step="0.0001" placeholder={`1 unité = ? ${productForm.unit}`} value={pack.factor || ''} onChange={e => setProductPacks(prev => { const u = [...prev]; u[idx] = { ...u[idx], factor: Number(e.target.value) }; return u })} />
+                  <button type="button" onClick={() => setProductPacks(prev => prev.filter((_, i) => i !== idx))} style={{ border: 'none', background: '#fee2e2', color: '#dc2626', borderRadius: 6, cursor: 'pointer' }}>✕</button>
+                </div>
+              ))}
+              <button type="button" className="btn-ghost" style={{ marginTop: 8 }} onClick={() => setProductPacks(prev => [...prev, { unit: 'sac', factor: 1 }])}>+ Conditionnement</button>
               <div style={{display:'flex',gap:12,justifyContent:'flex-end',marginTop:8}}>
                 <button type="button" className="btn-ghost" onClick={() => setShowProductModal(false)}>Annuler</button>
                 <button type="submit" className="btn-primary" disabled={saving}>{saving ? '...' : 'Enregistrer'}</button>

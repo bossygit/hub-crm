@@ -2,6 +2,7 @@
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
+import { homeForRole } from '@/lib/auth/access'
 
 export default function RegisterPage() {
   const [form, setForm] = useState({ full_name: '', email: '', password: '' })
@@ -22,9 +23,19 @@ export default function RegisterPage() {
     if (error) {
       setError(error.message)
       setLoading(false)
-    } else {
-      router.push('/dashboard')
+      return
     }
+    const { data: { user } } = await supabase.auth.getUser()
+    let role: string | undefined
+    if (user) {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', user.id)
+        .single()
+      role = profile?.role
+    }
+    router.push(homeForRole(role))
   }
 
   return (
@@ -33,7 +44,7 @@ export default function RegisterPage() {
         <div className="login-brand">
           <div style={{ marginBottom: 8, fontSize: '2.5rem' }}>🌿</div>
           <h1>HUB Distribution</h1>
-          <div className="tagline">Créer un compte</div>
+          <div className="tagline">Premier compte administrateur</div>
         </div>
         {error && <div className="alert alert-error">{error}</div>}
         <form onSubmit={handleRegister}>
@@ -54,7 +65,7 @@ export default function RegisterPage() {
           </div>
           <button type="submit" className="btn-primary"
             style={{ width: '100%', justifyContent: 'center', marginTop: 8, padding: '14px' }} disabled={loading}>
-            {loading ? 'Création...' : 'Créer mon compte →'}
+            {loading ? 'Création...' : 'Créer le compte admin →'}
           </button>
         </form>
         <div style={{ textAlign: 'center', marginTop: 20, color: '#666', fontSize: '0.8rem' }}>
