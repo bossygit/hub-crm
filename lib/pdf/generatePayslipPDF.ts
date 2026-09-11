@@ -21,9 +21,10 @@ export interface PayslipPDFData {
   net: number
 }
 
-const GREEN = [26, 61, 43] as const
-const DARK = [15, 31, 23] as const
-const GOLD = [212, 160, 23] as const
+// Signature imprimée HUB : encre logistique, safran de repérage, papier mat.
+const GREEN = [16, 45, 55] as const
+const DARK = [21, 36, 34] as const
+const GOLD = [221, 155, 36] as const
 
 function fmt(n: number): string {
   return Number(n).toLocaleString('fr-FR', { maximumFractionDigits: 0 })
@@ -67,7 +68,7 @@ export function generatePayslipPDF(data: PayslipPDFData): jsPDF {
 
   // ── Employee info boxes ──
   const boxW = (cw - 8) / 2
-  doc.setFillColor(248, 245, 238)
+  doc.setFillColor(244, 246, 244)
   doc.roundedRect(m, y, boxW, 22, 2, 2, 'F')
   doc.setFontSize(6)
   doc.setFont('helvetica', 'bold')

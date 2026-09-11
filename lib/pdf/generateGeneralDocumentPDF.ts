@@ -18,9 +18,10 @@ export interface GeneralDocumentPDFData {
   generated_at?: string
 }
 
-const GREEN = [26, 61, 43] as const
-const DARK = [15, 31, 23] as const
-const GOLD = [212, 160, 23] as const
+// Signature imprimée HUB : encre logistique, safran de repérage, papier mat.
+const GREEN = [16, 45, 55] as const
+const DARK = [21, 36, 34] as const
+const GOLD = [221, 155, 36] as const
 
 function dateFR(d: string | Date): string {
   return new Date(d).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })
@@ -110,7 +111,7 @@ export function generateGeneralDocumentPDF(data: GeneralDocumentPDFData): jsPDF 
     const r = data.recipient
     const boxH = 24
     if (y + boxH > 272) { doc.addPage(); y = 22 }
-    doc.setFillColor(248, 245, 238)
+    doc.setFillColor(244, 246, 244)
     doc.roundedRect(m, y, cw, boxH, 2, 2, 'F')
     doc.setFont('helvetica', 'bold')
     doc.setFontSize(6)

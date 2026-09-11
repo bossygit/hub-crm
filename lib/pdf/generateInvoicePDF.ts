@@ -35,9 +35,10 @@ export interface InvoicePDFData {
   }[]
 }
 
-const GREEN = [26, 61, 43] as const
-const DARK = [15, 31, 23] as const
-const GOLD = [212, 160, 23] as const
+// Signature imprimée HUB : encre logistique, safran de repérage, papier mat.
+const GREEN = [16, 45, 55] as const
+const DARK = [21, 36, 34] as const
+const GOLD = [221, 155, 36] as const
 
 function fmt(n: number): string {
   return Number(n).toLocaleString('fr-FR', { maximumFractionDigits: 0 })
@@ -86,7 +87,7 @@ export function generateInvoicePDF(data: InvoicePDFData): jsPDF {
   ]
   metas.forEach(([label, value], i) => {
     const bx = m + i * (boxW + 4)
-    doc.setFillColor(248, 245, 238)
+    doc.setFillColor(244, 246, 244)
     doc.roundedRect(bx, y, boxW, 16, 2, 2, 'F')
     doc.setFontSize(6)
     doc.setFont('helvetica', 'bold')
@@ -146,7 +147,7 @@ export function generateInvoicePDF(data: InvoicePDFData): jsPDF {
       y = 20
     }
     if (i % 2 === 1) {
-      doc.setFillColor(250, 250, 247)
+      doc.setFillColor(247, 249, 247)
       doc.rect(m, y - 2, cw, 9, 'F')
     }
     doc.setTextColor(26, 61, 43)
@@ -228,7 +229,7 @@ export function generateInvoicePDF(data: InvoicePDFData): jsPDF {
   // ── Notes ──
   if (data.notes) {
     if (y > 250) { doc.addPage(); y = 20 }
-    doc.setFillColor(248, 245, 238)
+    doc.setFillColor(244, 246, 244)
     doc.roundedRect(m, y, cw, 14, 2, 2, 'F')
     doc.setFontSize(6)
     doc.setFont('helvetica', 'bold')

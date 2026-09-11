@@ -4,12 +4,18 @@ import { createClient } from '@/lib/supabase/client'
 import { useUserRole } from '@/lib/hooks/useUserRole'
 import Link from 'next/link'
 import Image from 'next/image'
+import {
+  Archive, BarChart3, Beaker, BellRing, BriefcaseBusiness, Building2, ClipboardCheck,
+  FileText, FolderKanban, Handshake, KeyRound, LayoutDashboard, Package,
+  ReceiptText, ScrollText, Send, Settings2, ShoppingCart, UsersRound, Warehouse,
+} from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 import logoWhite from '../../app/assets/images/logo-white.png'
 import type { UserRole } from '@/types'
 
 interface NavItem {
   href: string
-  icon: string
+  icon: LucideIcon
   label: string
   external?: boolean
   roles?: UserRole[]
@@ -19,59 +25,59 @@ const nav: { section: string; items: NavItem[]; roles?: UserRole[] }[] = [
   {
     section: 'Principal',
     items: [
-      { href: '/dashboard', icon: '📊', label: 'Tableau de bord' },
-      { href: '/me/conges', icon: '🏖', label: 'Mes congés' },
-      { href: '/reports', icon: '📈', label: 'Rapports', roles: ['ceo', 'manager', 'admin'] },
+      { href: '/dashboard', icon: LayoutDashboard, label: 'Tableau de bord' },
+      { href: '/me/conges', icon: BriefcaseBusiness, label: 'Mes congés' },
+      { href: '/reports', icon: BarChart3, label: 'Rapports', roles: ['ceo', 'manager', 'admin'] },
     ]
   },
   {
     section: 'Opérations',
     items: [
-      { href: '/quotes', icon: '📝', label: 'Devis' },
-      { href: '/invoices', icon: '🧾', label: 'Facturation' },
-      { href: '/delivery-notes', icon: '🚚', label: 'Bons de Livraison' },
-      { href: '/purchases', icon: '🛒', label: 'Achats & réception' },
-      { href: '/production', icon: '🏭', label: 'Production' },
-      { href: '/stock', icon: '📦', label: 'Gestion de Stock' },
-      { href: '/stock/warehouses', icon: '🏬', label: 'Entrepôts' },
-      { href: '/stock/inventory', icon: '📋', label: 'Inventaire' },
-      { href: '/stock/recall', icon: '🔎', label: 'Traçabilité lots' },
-      { href: '/quality', icon: '🧪', label: 'Qualité' },
-      { href: '/portal-orders', icon: '🛍️', label: 'Commandes portail', roles: ['ceo', 'manager', 'admin'] },
-      { href: '/clients', icon: '👥', label: 'Clients & Partenaires' },
+      { href: '/quotes', icon: ScrollText, label: 'Devis' },
+      { href: '/invoices', icon: ReceiptText, label: 'Facturation' },
+      { href: '/delivery-notes', icon: Send, label: 'Bons de livraison' },
+      { href: '/purchases', icon: ShoppingCart, label: 'Achats & réception' },
+      { href: '/production', icon: FolderKanban, label: 'Production' },
+      { href: '/stock', icon: Package, label: 'Gestion de stock' },
+      { href: '/stock/warehouses', icon: Warehouse, label: 'Entrepôts' },
+      { href: '/stock/inventory', icon: ClipboardCheck, label: 'Inventaire' },
+      { href: '/stock/recall', icon: BellRing, label: 'Traçabilité lots' },
+      { href: '/quality', icon: Beaker, label: 'Qualité' },
+      { href: '/portal-orders', icon: ShoppingCart, label: 'Commandes portail', roles: ['ceo', 'manager', 'admin'] },
+      { href: '/clients', icon: Handshake, label: 'Clients & partenaires' },
     ]
   },
   {
     section: 'Documents',
     items: [
-      { href: '/documents', icon: '📄', label: 'Documents' },
-      { href: '/requests', icon: '📬', label: 'Demandes Externes' },
+      { href: '/documents', icon: FileText, label: 'Documents' },
+      { href: '/requests', icon: Archive, label: 'Demandes externes' },
     ]
   },
   {
     section: 'Ressources Humaines',
     roles: ['ceo', 'manager', 'admin'],
     items: [
-      { href: '/employees', icon: '👨‍💼', label: 'Employés & RH' },
-      { href: '/hr/contracts', icon: '📝', label: 'Contrats' },
-      { href: '/hr/certificates', icon: '🏛', label: 'Attestations' },
-      { href: '/hr/payslips', icon: '💵', label: 'Fiches de paie' },
-      { href: '/hr/leaves', icon: '🏖', label: 'Congés' },
-      { href: '/hr/attendance', icon: '🕒', label: 'Présences & pointage' },
-      { href: '/recruitment', icon: '🎯', label: 'Recrutement' },
+      { href: '/employees', icon: UsersRound, label: 'Employés & RH' },
+      { href: '/hr/contracts', icon: ScrollText, label: 'Contrats' },
+      { href: '/hr/certificates', icon: FileText, label: 'Attestations' },
+      { href: '/hr/payslips', icon: ReceiptText, label: 'Fiches de paie' },
+      { href: '/hr/leaves', icon: BriefcaseBusiness, label: 'Congés' },
+      { href: '/hr/attendance', icon: ClipboardCheck, label: 'Présences & pointage' },
+      { href: '/recruitment', icon: UsersRound, label: 'Recrutement' },
     ]
   },
   {
     section: 'Administration',
     roles: ['ceo', 'admin'],
     items: [
-      { href: '/admin/users', icon: '🔑', label: 'Gestion des rôles', roles: ['ceo', 'admin'] },
+      { href: '/admin/users', icon: KeyRound, label: 'Gestion des rôles', roles: ['ceo', 'admin'] },
     ]
   },
   {
     section: 'Portail',
     items: [
-      { href: '/portal', icon: '🌐', label: 'Portail Public', external: true },
+      { href: '/portal', icon: Building2, label: 'Portail public', external: true },
     ]
   },
 ]
@@ -111,6 +117,7 @@ export default function Sidebar() {
           <div key={group.section}>
             <div className="nav-section">{group.section}</div>
             {group.items.filter(item => isVisible(item)).map(item => {
+              const Icon = item.icon
               const hrefs = group.items.map(i => i.href)
               const exact = pathname === item.href
               const nested = pathname.startsWith(item.href + '/')
@@ -127,7 +134,7 @@ export default function Sidebar() {
                 className={`nav-item ${active ? 'active' : ''}`}
                 style={{ textDecoration: 'none' }}
               >
-                <span style={{ fontSize: '1rem' }}>{item.icon}</span>
+                <span style={{ display: 'grid', placeItems: 'center', width: 18 }}><Icon size={16} strokeWidth={1.8} /></span>
                 <span>{item.label}</span>
                 {item.external && <span style={{ marginLeft: 'auto', fontSize: '0.65rem', opacity: 0.5 }}>↗</span>}
               </Link>
@@ -143,7 +150,7 @@ export default function Sidebar() {
           className="nav-item"
           style={{ width: '100%', border: 'none', background: 'transparent', cursor: 'pointer' }}
         >
-          <span>🚪</span>
+          <span style={{ display: 'grid', placeItems: 'center', width: 18 }}><Settings2 size={16} strokeWidth={1.8} /></span>
           <span>Déconnexion</span>
         </button>
       </div>

@@ -12,9 +12,10 @@ export interface CertificatePDFData {
   doc_ref?: string
 }
 
-const GREEN = [26, 61, 43] as const
-const DARK = [15, 31, 23] as const
-const GOLD = [212, 160, 23] as const
+// Signature imprimée HUB : encre logistique, safran de repérage, papier mat.
+const GREEN = [16, 45, 55] as const
+const DARK = [21, 36, 34] as const
+const GOLD = [221, 155, 36] as const
 
 const contractLabels: Record<string, string> = { cdi: 'CDI', cdd: 'CDD', stage: 'Stage', freelance: 'Freelance' }
 

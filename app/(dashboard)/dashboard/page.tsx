@@ -77,8 +77,8 @@ function StatCard({ icon, value, label, tone, href }: { icon: string; value: num
 
 function Panel({ title, to, linkLabel = 'Voir tout →', span = false, children }: { title: string; to: string; linkLabel?: string; span?: boolean; children: ReactNode }) {
   return (
-    <section style={{ background: 'white', borderRadius: 12, border: '1px solid #e8e4db', overflow: 'hidden', display: 'flex', flexDirection: 'column', ...(span ? { gridColumn: '1 / -1' } : {}) }}>
-      <div style={{ padding: '16px 20px', borderBottom: '1px solid #f0ece4', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+    <section className="dashboard-panel" style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column', ...(span ? { gridColumn: '1 / -1' } : {}) }}>
+      <div className="dashboard-panel__heading" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
         <h3 style={{ fontWeight: 700, color: 'var(--hub-green)', fontSize: '0.95rem', margin: 0 }}>{title}</h3>
         <Link href={to} style={{ fontSize: '0.8rem', color: 'var(--hub-green-mid)', fontWeight: 600, whiteSpace: 'nowrap' }}>{linkLabel}</Link>
       </div>
@@ -268,13 +268,26 @@ export default async function DashboardPage() {
   return (
     <div>
       <div className="page-header">
-        <h2>Tableau de bord</h2>
+        <h2>Pilotage</h2>
         <div style={{ fontSize: '0.8rem', color: '#666' }}>
           {now.toLocaleDateString('fr-FR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
         </div>
       </div>
 
       <div style={{ padding: '32px' }}>
+        <section className="dashboard-hero">
+          <p className="dashboard-kicker">Centre de pilotage · {monthName}</p>
+          <h1>Bonjour {profile?.full_name?.split(' ')[0] || 'à vous'}, voici ce qui mérite votre attention.</h1>
+          <p>Suivez les opérations, les stocks et les validations en attente depuis un seul point de vue.</p>
+          <div className="dashboard-actions" style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 20, position: 'relative', zIndex: 1 }}>
+            {quickActions.map(a => (
+              <Link key={a.label} href={a.href} className="btn-primary" style={{ textDecoration: 'none', padding: '9px 14px', fontSize: '0.8rem' }}>
+                <span>{a.icon}</span> {a.label}
+              </Link>
+            ))}
+          </div>
+        </section>
+
         {/* Bannière d'erreur Supabase : on ne laisse jamais un échec silencieux. */}
         {errors.length > 0 && (
           <div className="alert alert-error" role="alert" style={{ marginBottom: 24 }}>
@@ -289,15 +302,6 @@ export default async function DashboardPage() {
         {/* Stats principales */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16, marginBottom: 24 }}>
           {statCards.map(c => <StatCard key={c.label} {...c} />)}
-        </div>
-
-        {/* Actions rapides */}
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 28 }}>
-          {quickActions.map(a => (
-            <Link key={a.label} href={a.href} className="btn-primary" style={{ textDecoration: 'none', padding: '9px 16px', fontSize: '0.82rem' }}>
-              <span>{a.icon}</span> {a.label}
-            </Link>
-          ))}
         </div>
 
         <PendingValidationsBlock />

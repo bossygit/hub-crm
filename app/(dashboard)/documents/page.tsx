@@ -516,7 +516,7 @@ export default function DocumentsPage() {
   return (
     <div>
       <div className="page-header">
-        <h2>📄 Documents généraux</h2>
+        <h2>Registre documentaire</h2>
         <button className="btn-primary" onClick={() => { setError(''); setForm(emptyForm()); setShowModal(true) }}>
           + Nouveau document
         </button>
@@ -539,16 +539,19 @@ export default function DocumentsPage() {
         </div>
 
         {/* Filtres par catégorie (chips cliquables) */}
+        <div className="document-filters">
         <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap', alignItems: 'center' }}>
           <button
             onClick={() => setCatFilter('all')}
-            style={{ background: catFilter === 'all' ? '#1a3d2b' : 'white', color: catFilter === 'all' ? 'white' : '#1a3d2b', border: '1px solid #e8e4db', borderRadius: 8, padding: '7px 14px', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer' }}
+            className={`document-filter-chip ${catFilter === 'all' ? 'is-active' : ''}`}
+            style={{ padding: '7px 14px', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer' }}
           >Toutes ({stats.total})</button>
           {CATEGORIES.map(c => (
             <button
               key={c.value}
               onClick={() => setCatFilter(catFilter === c.value ? 'all' : c.value)}
-              style={{ background: catFilter === c.value ? '#1a3d2b' : 'white', color: catFilter === c.value ? 'white' : '#555', border: '1px solid #e8e4db', borderRadius: 8, padding: '7px 14px', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer' }}
+              className={`document-filter-chip ${catFilter === c.value ? 'is-active' : ''}`}
+              style={{ padding: '7px 14px', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer' }}
             >{c.icon} {c.label} <strong>({catCounts(c.value)})</strong></button>
           ))}
         </div>
@@ -574,15 +577,15 @@ export default function DocumentsPage() {
             Afficher les documents archivés
           </label>
         </div>
+        </div>
 
         {/* Table */}
-        <div style={{ background: 'white', borderRadius: 12, border: '1px solid #e8e4db', overflow: 'hidden' }}>
+        <div className="document-register" style={{ background: 'white', overflow: 'hidden' }}>
           {loading ? <div style={{ padding: 48, textAlign: 'center', color: '#999' }}>Chargement du registre…</div> : (
             <table className="hub-table">
               <thead>
                 <tr>
-                  <th>Référence</th>
-                  <th>Titre / Objet</th>
+                  <th>Document</th>
                   <th>Catégorie</th>
                   <th>Destinataire</th>
                   <th>Date</th>
@@ -641,7 +644,7 @@ export default function DocumentsPage() {
                 })}
                 {filtered.length === 0 && (
                   <tr>
-                    <td colSpan={7} style={{ textAlign: 'center', padding: 48, color: '#999' }}>
+                    <td colSpan={6} style={{ textAlign: 'center', padding: 48, color: '#999' }}>
                       {rows.length === 0 ? 'Aucun document au registre. Créez votre premier document général.' : 'Aucun document ne correspond aux filtres.'}
                     </td>
                   </tr>
