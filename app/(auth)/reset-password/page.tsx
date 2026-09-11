@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { Session } from '@supabase/supabase-js'
+import { PASSWORD_RULES, passwordError } from '@/lib/auth/password'
 
 export default function ResetPasswordPage() {
   const [checking, setChecking] = useState(true)
@@ -45,8 +46,9 @@ export default function ResetPasswordPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (password.length < 8) {
-      setError('Le mot de passe doit contenir au moins 8 caractères.')
+    const validationError = passwordError(password)
+    if (validationError) {
+      setError(validationError)
       return
     }
     if (password !== confirm) {
@@ -136,7 +138,8 @@ export default function ResetPasswordPage() {
               </div>
             )}
             <p style={{ marginBottom: 20, color: '#666', fontSize: '0.85rem', lineHeight: 1.6 }}>
-              Choisissez un nouveau mot de passe (8 caractères minimum).
+              Choisissez un mot de passe d&apos;au moins 12 caractères, avec majuscule, minuscule,
+              chiffre et caractère spécial.
             </p>
             <form onSubmit={handleSubmit}>
               <div className="hub-form-group">
@@ -149,7 +152,7 @@ export default function ResetPasswordPage() {
                     value={password}
                     onChange={e => setPassword(e.target.value)}
                     required
-                    minLength={8}
+                    minLength={PASSWORD_RULES.minLength}
                     autoFocus
                     style={{ paddingRight: 76 }}
                   />
@@ -183,7 +186,7 @@ export default function ResetPasswordPage() {
                   value={confirm}
                   onChange={e => setConfirm(e.target.value)}
                   required
-                  minLength={8}
+                  minLength={PASSWORD_RULES.minLength}
                 />
               </div>
               <button

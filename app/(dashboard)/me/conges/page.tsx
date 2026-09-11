@@ -42,46 +42,58 @@ export default function MyCongesPage() {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-    if (!user) {
-      setLoading(false)
-      return
-    }
-    setUserId(user.id)
+    try {
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser()
+      if (userError || !user) {
+        setUserId(null)
+        setEmp(null)
+        setBalances([])
+        setLeaves([])
+        return
+      }
+      setUserId(user.id)
 
-    const { data: empData, error: empErr } = await supabase
-      .from('employees')
-      .select('*')
-      .eq('user_id', user.id)
-      .maybeSingle()
-    if (empErr || !empData) {
+      const { data: empData, error: empErr } = await supabase
+        .from('employees')
+        .select('*')
+        .eq('user_id', user.id)
+        .maybeSingle()
+      if (empErr || !empData) {
+        if (empErr) toast('error', 'Impossible de charger votre fiche employé.')
+        setEmp(null)
+        setBalances([])
+        setLeaves([])
+        return
+      }
+      setEmp(empData)
+
+      const [balRes, leafRes] = await Promise.all([
+        supabase
+          .from('leave_balances')
+          .select('*')
+          .eq('employee_id', empData.id)
+          .order('year', { ascending: false }),
+        supabase
+          .from('employee_documents')
+          .select('*')
+          .eq('employee_id', empData.id)
+          .eq('type', 'conge')
+          .order('created_at', { ascending: false }),
+      ])
+      if (balRes.error || leafRes.error) toast('error', 'Erreur de chargement de vos congés.')
+      setBalances(balRes.data || [])
+      setLeaves(leafRes.data || [])
+    } catch {
       setEmp(null)
       setBalances([])
       setLeaves([])
+      toast('error', 'Erreur réseau : vos congés ne peuvent pas être chargés.')
+    } finally {
       setLoading(false)
-      return
     }
-    setEmp(empData)
-
-    const [balRes, leafRes] = await Promise.all([
-      supabase
-        .from('leave_balances')
-        .select('*')
-        .eq('employee_id', empData.id)
-        .order('year', { ascending: false }),
-      supabase
-        .from('employee_documents')
-        .select('*')
-        .eq('employee_id', empData.id)
-        .eq('type', 'conge')
-        .order('created_at', { ascending: false }),
-    ])
-    if (balRes.error || leafRes.error) toast('error', 'Erreur de chargement de vos congés.')
-    setBalances(balRes.data || [])
-    setLeaves(leafRes.data || [])
-    setLoading(false)
   }, [])
 
   useEffect(() => { load() }, [load])

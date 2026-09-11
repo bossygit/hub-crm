@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { homeForRole } from '@/lib/auth/access'
+import { PASSWORD_RULES, passwordError } from '@/lib/auth/password'
 
 export default function RegisterPage() {
   const [form, setForm] = useState({ full_name: '', email: '', password: '' })
@@ -13,6 +14,11 @@ export default function RegisterPage() {
 
   async function handleRegister(e: React.FormEvent) {
     e.preventDefault()
+    const validationError = passwordError(form.password)
+    if (validationError) {
+      setError(validationError)
+      return
+    }
     setLoading(true)
     setError('')
     const { error } = await supabase.auth.signUp({
@@ -60,8 +66,11 @@ export default function RegisterPage() {
           </div>
           <div className="hub-form-group">
             <label>Mot de passe</label>
-            <input className="hub-input" type="password" placeholder="Min. 6 caractères" value={form.password}
-              onChange={e => setForm({...form, password: e.target.value})} required minLength={6} />
+            <input className="hub-input" type="password" placeholder="12 caractères minimum" value={form.password}
+              onChange={e => setForm({...form, password: e.target.value})} required minLength={PASSWORD_RULES.minLength} />
+            <div style={{ marginTop: 6, color: '#64748b', fontSize: '0.75rem', lineHeight: 1.45 }}>
+              12 caractères minimum, avec majuscule, minuscule, chiffre et caractère spécial.
+            </div>
           </div>
           <button type="submit" className="btn-primary"
             style={{ width: '100%', justifyContent: 'center', marginTop: 8, padding: '14px' }} disabled={loading}>
