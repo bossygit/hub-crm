@@ -24,6 +24,10 @@ const TYPE_META: Record<string, { icon: string; label: string }> = {
   quote_approved: { icon: '✅', label: 'Devis accepté' },
   quote_rejected: { icon: '❌', label: 'Devis refusé' },
   quote_converted: { icon: '🔄', label: 'Devis converti en facture' },
+  stock_low: { icon: '📦', label: 'Stock bas' },
+  invoice_overdue: { icon: '⏰', label: 'Facture en retard' },
+  reminder_sent: { icon: '✉️', label: 'Relance client envoyée' },
+  inventory_planned: { icon: '📋', label: 'Inventaire planifié' },
 }
 
 const FALLBACK_META = { icon: '📋', label: 'Notification' }
@@ -45,6 +49,13 @@ function resolveLink(n: NotificationRow): string | undefined {
       return `/quotes/${n.reference_id}`
     case 'invoice_pending':
       return `/invoices/${n.reference_id}`
+    case 'invoice_overdue':
+    case 'reminder_sent':
+      return `/invoices/${n.reference_id}`
+    case 'stock_low':
+      return '/stock'
+    case 'inventory_planned':
+      return '/stock/inventory'
     case 'bl_pending':
       return `/delivery-notes/${n.reference_id}`
     case 'leave_pending':

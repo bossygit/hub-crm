@@ -12,6 +12,69 @@
 ALTER TABLE public.employees
   ADD COLUMN IF NOT EXISTS user_id uuid REFERENCES public.profiles(id) ON DELETE SET NULL;
 
+-- Compatibilité avec les premières versions de la table RH déjà déployées.
+-- Ces ajouts sont non destructifs : les fiches existantes conservent leurs
+-- colonnes et reçoivent simplement les champs utilisés par le module actuel.
+ALTER TABLE public.employees ADD COLUMN IF NOT EXISTS employee_number text;
+ALTER TABLE public.employees ADD COLUMN IF NOT EXISTS full_name text;
+ALTER TABLE public.employees ADD COLUMN IF NOT EXISTS position text;
+ALTER TABLE public.employees ADD COLUMN IF NOT EXISTS department text;
+ALTER TABLE public.employees ADD COLUMN IF NOT EXISTS email text;
+ALTER TABLE public.employees ADD COLUMN IF NOT EXISTS phone text;
+ALTER TABLE public.employees ADD COLUMN IF NOT EXISTS hire_date date;
+ALTER TABLE public.employees ADD COLUMN IF NOT EXISTS contract_type text DEFAULT 'cdi';
+ALTER TABLE public.employees ADD COLUMN IF NOT EXISTS salary numeric;
+ALTER TABLE public.employees ADD COLUMN IF NOT EXISTS status text DEFAULT 'actif';
+ALTER TABLE public.employees ADD COLUMN IF NOT EXISTS address text;
+ALTER TABLE public.employees ADD COLUMN IF NOT EXISTS notes text;
+ALTER TABLE public.employees ADD COLUMN IF NOT EXISTS updated_at timestamptz DEFAULT now();
+
+-- ── Réconciliation du schéma RH divergent ───────────────────────────
+-- La base distante a hérité d'une table employees d'une version antérieure :
+--   • start_date NOT NULL sans valeur par défaut, alors que l'application
+--     écrit hire_date → toute création d'employé échouait (23502) ;
+--   • status contraint sur des valeurs anglaises (active/on_leave/terminated)
+--     alors que l'application utilise actif/conge/suspendu/sorti → toute
+--     création ou mise à jour échouait (23514).
+-- Sans cette réconciliation, ni la migration ni le module RH ne peuvent écrire.
+ALTER TABLE public.employees ADD COLUMN IF NOT EXISTS start_date date;
+ALTER TABLE public.employees ALTER COLUMN start_date DROP NOT NULL;
+-- Volontairement aucune valeur par défaut : un défaut CURRENT_DATE serait
+-- appliqué avant le trigger et empêcherait la recopie de hire_date
+-- (le trigger ne comble que les valeurs NULL).
+
+-- ── Statuts employés : aucune ligne existante n'est réécrite ─────────
+-- Le CHECK accepte à la fois les valeurs historiques anglaises
+-- (active/on_leave/terminated) et les valeurs françaises utilisées par
+-- l'application (actif/conge/suspendu/sorti). La traduction à l'affichage
+-- est faite côté application (normalizeEmployeeStatus).
+ALTER TABLE public.employees DROP CONSTRAINT IF EXISTS employees_status_check;
+ALTER TABLE public.employees
+  ADD CONSTRAINT employees_status_check
+  CHECK (status IN ('actif', 'conge', 'suspendu', 'sorti', 'active', 'on_leave', 'terminated'));
+
+-- Maintient hire_date et start_date cohérents quel que soit le champ écrit :
+-- l'application écrit hire_date, l'ancien schéma lisait start_date.
+CREATE OR REPLACE FUNCTION public.sync_employee_dates()
+RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF NEW.start_date IS NULL AND NEW.hire_date IS NOT NULL THEN
+    NEW.start_date := NEW.hire_date;
+  ELSIF NEW.hire_date IS NULL AND NEW.start_date IS NOT NULL THEN
+    NEW.hire_date := NEW.start_date;
+  END IF;
+  RETURN NEW;
+END $$;
+
+DROP TRIGGER IF EXISTS trg_sync_employee_dates ON public.employees;
+CREATE TRIGGER trg_sync_employee_dates
+  BEFORE INSERT OR UPDATE ON public.employees
+  FOR EACH ROW EXECUTE FUNCTION public.sync_employee_dates();
+
+-- Reprend l'historique : l'ancien start_date devient la date d'embauche.
+UPDATE public.employees SET hire_date = start_date WHERE hire_date IS NULL AND start_date IS NOT NULL;
+UPDATE public.employees SET start_date = COALESCE(hire_date, created_at::date, CURRENT_DATE) WHERE start_date IS NULL;
+
 CREATE UNIQUE INDEX IF NOT EXISTS employees_user_id_key
   ON public.employees (user_id)
   WHERE user_id IS NOT NULL;
@@ -60,7 +123,7 @@ WITH supplier_products AS (
     ('Congo Agro Source', 'Farine de manioc premium', 'Matières premières', 'kg', 250, 80, 1.0, true),
     ('Africa Food Trading', 'Arachides décortiquées premium', 'Épicerie', 'kg', 180, 100, 1.0, true),
     ('Brazzaville Emballage', 'Sachets kraft HUB 1 kg', 'Emballages', 'pièce', 800, 200, 1.0, false),
-    ('TransLogistique Congo', 'Carton d'expédition moyen format', 'Emballages', 'pièce', 450, 100, 1.0, false)
+    ('TransLogistique Congo', 'Carton d''expédition moyen format', 'Emballages', 'pièce', 450, 100, 1.0, false)
   ) AS p(supplier_name, name, category, unit, price_per_unit, threshold_alert, initial_quantity, batch_tracking)
 )
 INSERT INTO public.products (name, category, unit, price_per_unit, threshold_alert, quantity, batch_tracking, supplier_id, description)
@@ -71,30 +134,19 @@ FROM supplier_products p
 JOIN public.clients c ON c.name = p.supplier_name AND c.type = 'fournisseur'
 WHERE NOT EXISTS (SELECT 1 FROM public.products pr WHERE pr.name = p.name);
 
--- Lie le catalogue existant, encore non rattaché, aux fournisseurs démo.
-WITH unlinked_products AS (
-  SELECT p.id, row_number() OVER (ORDER BY p.created_at, p.id) AS rn
-  FROM public.products p
-  WHERE p.supplier_id IS NULL
-), suppliers AS (
-  SELECT c.id, row_number() OVER (ORDER BY c.name) AS rn
-  FROM public.clients c
-  WHERE c.type = 'fournisseur'
-)
-UPDATE public.products p
-SET supplier_id = s.id
-FROM unlinked_products u
-JOIN suppliers s ON s.rn = ((u.rn - 1) % 4) + 1
-WHERE p.id = u.id;
+-- NB : le rattachement automatique du catalogue existant aux fournisseurs
+-- démo a été retiré. Il modifiait des produits réels (supplier_id renseigné
+-- vers une fiche « démo »), ce qui faussait les données d'approvisionnement.
+-- Seuls les produits créés ci-dessus (données démo) portent un fournisseur.
 
 -- ── Effectif de démonstration, sans compte d'authentification lié : les
 --    comptes réels sont ensuite reliés depuis le module RH.
 INSERT INTO public.employees (
   employee_number, full_name, position, department, email, phone,
-  hire_date, contract_type, salary, status, address, notes
+  hire_date, start_date, contract_type, salary, status, address, notes
 )
 SELECT v.employee_number, v.full_name, v.position, v.department, v.email, v.phone,
-       v.hire_date::date, v.contract_type, v.salary, 'actif', v.address,
+       v.hire_date::date, v.hire_date::date, v.contract_type, v.salary, 'actif', v.address,
        'Donnée démo phase 1 — à relier au compte utilisateur correspondant.'
 FROM (VALUES
   ('EMP-DEMO-001', 'Grâce Mavoungou', 'Responsable commerciale', 'Commercial', 'grace.mavoungou@hubdistribution.demo', '+242 06 700 11 01', '2024-02-01', 'cdi', 450000, 'Makélékélé, Brazzaville'),
@@ -146,10 +198,12 @@ BEGIN
   WHERE name = 'Vente comptoir — HUB Distribution'
   LIMIT 1;
 
+  -- Uniquement les factures qui vont être régularisées ci-dessous :
+  -- les brouillons et factures annulées restent intacts.
   UPDATE public.invoices
   SET client_id = v_fallback_client,
       notes = concat_ws(E'\n', notes, 'Client technique attribué — phase 1 démo.')
-  WHERE client_id IS NULL AND v_fallback_client IS NOT NULL;
+  WHERE client_id IS NULL AND status = 'pending' AND v_fallback_client IS NOT NULL;
 
   -- Les lignes rattachées à un lot doivent d'abord disposer du stock de lot.
   FOR v_item IN

@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/client'
 import type { Employee } from '@/types'
 import { useToast } from '@/components/ui/Toast'
 import { generateContractPDF } from '@/lib/pdf/generateContractPDF'
+import { EMPLOYEE_ACTIVE_STATUSES } from '@/lib/hr/employees'
 
 const contractLabels: Record<string, string> = { cdi: 'CDI', cdd: 'CDD', stage: 'Stage', freelance: 'Freelance' }
 
@@ -28,7 +29,7 @@ export default function ContractsPage() {
     const [docsRes, empRes] = await Promise.all([
       supabase.from('employee_documents').select('*, employee:employees(id,full_name,position,department,contract_type,salary)')
         .eq('type', 'contrat').order('created_at', { ascending: false }),
-      supabase.from('employees').select('*').eq('status', 'actif').order('full_name'),
+      supabase.from('employees').select('*').in('status', EMPLOYEE_ACTIVE_STATUSES).order('full_name'),
     ])
     if (docsRes.error || empRes.error) toast('error', 'Erreur de chargement des contrats.')
     setDocs(docsRes.data || []); setEmployees(empRes.data || []); setLoading(false)

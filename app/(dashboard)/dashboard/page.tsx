@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import type { ReactNode } from 'react'
 import PendingValidationsBlock from './PendingValidationsBlock'
+import AlertsScanButton from './AlertsScanButton'
 
 const MANAGER_ROLES = ['ceo', 'manager', 'admin']
 
@@ -305,6 +306,8 @@ export default async function DashboardPage() {
         </div>
 
         <PendingValidationsBlock />
+
+        <AlertsScanButton />
 
         {/* Pulsation opérationnelle : chiffres d'action, tous issus de statuts réels */}
         <PulseRow tiles={pulseTiles} />

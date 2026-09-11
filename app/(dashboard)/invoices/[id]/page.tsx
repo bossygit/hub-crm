@@ -16,6 +16,13 @@ const statusConfig: Record<string, { label: string; badge: string; icon: string;
   cancelled: { label: 'Annulée',             badge: 'badge-red',    icon: '❌', color: '#991b1b' },
 }
 
+const blMeta: Record<string, { label: string; badge: string }> = {
+  draft: { label: 'Brouillon', badge: 'badge-gray' },
+  pending: { label: 'En attente', badge: 'badge-amber' },
+  approved: { label: 'Livré', badge: 'badge-green' },
+  rejected: { label: 'Annulé', badge: 'badge-red' },
+}
+
 export default function InvoiceDetailPage() {
   const router = useRouter()
   const params = useParams()
@@ -31,6 +38,9 @@ export default function InvoiceDetailPage() {
   const [paymentForm, setPaymentForm] = useState({ amount: 0, payment_date: new Date().toISOString().split('T')[0], method: 'virement', reference: '', notes: '' })
   const [saving, setSaving] = useState(false)
   const [canValidate, setCanValidate] = useState(false)
+  const [linkedBls, setLinkedBls] = useState<any[]>([])
+  const [reminders, setReminders] = useState<any[]>([])
+  const [reminding, setReminding] = useState(false)
   const supabase = createClient()
   const { toast } = useToast()
 
@@ -44,14 +54,20 @@ export default function InvoiceDetailPage() {
 
   async function load() {
     setLoading(true)
-    const [{ data: inv }, { data: it }, { data: pay }] = await Promise.all([
+    const [{ data: inv }, { data: it }, { data: pay }, { data: bls }, { data: rem }] = await Promise.all([
       supabase.from('invoices').select('*, client:clients(*), creator:profiles!invoices_created_by_fkey(full_name)').eq('id', id).single(),
       supabase.from('invoice_items').select('*, product:products(name,unit), batch:product_batches(batch_number,expiry_date)').eq('invoice_id', id).order('sort_order'),
       supabase.from('invoice_payments').select('*').eq('invoice_id', id).order('payment_date', { ascending: false }),
+      supabase.from('documents').select('id, document_number, status, created_at, validated_at')
+        .in('type', ['bon_livraison', 'bon_de_livraison']).eq('invoice_id', id).order('created_at', { ascending: false }),
+      // Table phase 2 : absente tant que la migration n'est pas appliquée.
+      supabase.from('invoice_reminders').select('*').eq('invoice_id', id).order('created_at', { ascending: false }),
     ])
     setInvoice(inv)
     setItems(it || [])
     setPayments(pay || [])
+    setLinkedBls(bls || [])
+    setReminders(rem || [])
 
     // Historique financier du client
     if (inv?.client_id) {
@@ -145,6 +161,42 @@ ${payment.notes ? `<div style="padding:12px 16px;background:#f8f5ee;border-radiu
 
   async function generateDeliveryNote() {
     router.push(`/delivery-notes/new?invoice_id=${id}`)
+  }
+
+  // Relance ce client (aperçu puis confirmation), phase 2.
+  async function remindNow() {
+    setReminding(true)
+    try {
+      const preview = await fetch('/api/invoices/remind', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dryRun: true, invoice_ids: [id] }),
+      }).then(r => r.json())
+
+      if (!preview?.ok) throw new Error(preview?.error || 'Aperçu impossible.')
+      if (!preview.ready) {
+        toast('warning', preview.emailConfigured === false
+          ? 'RESEND_API_KEY non configurée — relance email indisponible.'
+          : 'Relance non disponible (délai de carence, échéance non dépassée ou client sans email).')
+        return
+      }
+      const item = preview.items?.[0]
+      if (!confirm(`Envoyer la relance n°${item?.level ?? 1} à ${item?.email || 'ce client'} ?`)) return
+
+      const result = await fetch('/api/invoices/remind', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ invoice_ids: [id] }),
+      }).then(r => r.json())
+
+      if (!result?.ok) throw new Error(result?.error || 'Envoi impossible.')
+      toast(result.failed ? 'warning' : 'success', result.sent ? 'Relance envoyée au client.' : 'Aucune relance envoyée.')
+      load()
+    } catch (e) {
+      toast('error', e instanceof Error ? e.message : 'Erreur inattendue.')
+    } finally {
+      setReminding(false)
+    }
   }
 
   function generatePDF() {
@@ -706,6 +758,62 @@ ${payment.notes ? `<div style="padding:12px 16px;background:#f8f5ee;border-radiu
                 </div>
               ))}
             </div>
+
+            {/* Bons de livraison liés (phase 2) */}
+            <div className="invoice-section invoice-section--delivery-notes" style={{ background: 'white', borderRadius: 12, border: '1px solid #e8e4db', padding: '20px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                <div className="invoice-section__title" style={{ fontWeight: 700, color: 'var(--hub-green)', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>🚚 Bons de livraison</div>
+                {['approved', 'partial', 'paid'].includes(invoice.status) && (
+                  <button type="button" className="btn-ghost" style={{ padding: '4px 10px', fontSize: '0.75rem' }} onClick={generateDeliveryNote}>+ Créer un BL</button>
+                )}
+              </div>
+              {linkedBls.length === 0 ? (
+                <div style={{ fontSize: '0.83rem', color: '#999' }}>Aucun bon de livraison lié à cette facture.</div>
+              ) : linkedBls.map(bl => {
+                const meta = blMeta[bl.status] || blMeta.draft
+                return (
+                  <div key={bl.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid #f0ece4', fontSize: '0.83rem' }}>
+                    <Link href={`/delivery-notes/${bl.id}`} style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--hub-green-mid)', textDecoration: 'none' }}>
+                      {bl.document_number || `#${bl.id.slice(-6)}`}
+                    </Link>
+                    <span className={`badge ${meta.badge}`}>{meta.label}</span>
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* Relances client (phase 2) */}
+            {['approved', 'partial'].includes(invoice.status) && (
+              <div className="invoice-section invoice-section--reminders" style={{ background: 'white', borderRadius: 12, border: '1px solid #e8e4db', padding: '20px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                  <div className="invoice-section__title" style={{ fontWeight: 700, color: 'var(--hub-green)', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>✉️ Relances client</div>
+                  {balance > 0 && (
+                    <button type="button" className="btn-ghost" style={{ padding: '4px 10px', fontSize: '0.75rem' }} disabled={reminding} onClick={remindNow}>
+                      {reminding ? '…' : 'Relancer maintenant'}
+                    </button>
+                  )}
+                </div>
+                {reminders.length === 0 ? (
+                  <div style={{ fontSize: '0.83rem', color: '#999' }}>Aucune relance envoyée pour cette facture.</div>
+                ) : reminders.map(r => (
+                  <div key={r.id} style={{ padding: '8px 0', borderBottom: '1px solid #f0ece4', fontSize: '0.8rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                      <span style={{ fontWeight: 600 }}>Niveau {r.level} · {r.channel}</span>
+                      <span className={`badge ${r.status === 'sent' ? 'badge-green' : r.status === 'failed' ? 'badge-red' : 'badge-gray'}`}>
+                        {r.status === 'sent' ? 'Envoyée' : r.status === 'failed' ? 'Échec' : 'Ignorée'}
+                      </span>
+                    </div>
+                    <div style={{ color: '#666' }}>
+                      {new Date(r.created_at).toLocaleDateString('fr-FR')}
+                      {r.recipient_email ? ` · ${r.recipient_email}` : ''}
+                      {r.amount_due ? ` · ${Number(r.amount_due).toLocaleString('fr-FR', { maximumFractionDigits: 0 })} FCFA` : ''}
+                      {r.days_overdue ? ` · ${r.days_overdue} j de retard` : ''}
+                    </div>
+                    {r.error && <div style={{ color: '#991b1b', fontSize: '0.75rem' }}>{r.error}</div>}
+                  </div>
+                ))}
+              </div>
+            )}
 
             {/* Historique client */}
             {clientHistory && (

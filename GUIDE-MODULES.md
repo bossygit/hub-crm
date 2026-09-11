@@ -379,6 +379,11 @@ Patches RH lot 1 (apres 27) :
 
 28. `20260909170001_audit_28_hr_attendance_leave_balances.sql` — **Presences & pointage** (FK `attendance.employee_id` rebranchee sur `employees`, colonnes check_in/check_out/hours_worked/overtime_hours, RLS RH + lecture self) et **fiabilisation des soldes de conges** : seul le conge annuel debite, recalcul idempotent a l'insertion/modification/**suppression**, RPC `hr_ensure_leave_balances`
 
+Patches audit phase 1 & 2 (apres 28) :
+
+29. `20260911150000_phase1_stabilisation_demo_data.sql` — **Stabilisation** : fournisseurs/produits/employes de demonstration, regularisation des factures en attente, reconciliation du schema RH divergent (`employees.start_date`, CHECK `status` elargi **sans reecrire** les lignes, trigger `sync_employee_dates`)
+30. `20260911160000_phase2_activation.sql` — **Activation** : elargissement du CHECK `notifications.type` (`stock_low`, `invoice_overdue`, `reminder_sent`, `inventory_planned`), table `invoice_reminders` (+ RLS), planification d'inventaire (`inventory_sessions.scheduled_date` / `assigned_to` / `schedule_notes` + statut `planned`), index de scan des factures ouvertes
+
 ---
 
 ## Roles et permissions
@@ -432,6 +437,23 @@ et sont conserves sous `supabase/migrations/`. La base distante divergeait du se
 `clients.tax_id`, `employees.user_id`, `document_requests.handled_by` absentes) : les patches ont ete rendus autosuffisants
 (`ADD COLUMN IF NOT EXISTS`) pour couvrir les deux cas. Remarque : pour toute nouvelle migration, preferer
 `gen_random_uuid()` (natif) a `uuid_generate_v4()` (extension `uuid-ossp` hors search_path du role de migration CLI).
+
+---
+
+## Évolutions septembre 2026 — Phase 2 « Activation »
+
+Phase 2 de l'audit, **hors connexion au site e-commerce** (exclue volontairement). Quatre chantiers livrés :
+
+| Chantier | Livraison |
+|----------|-----------|
+| **Bons de livraison liés aux factures** | Bouton « 🚚 Générer les BL manquants » sur `/invoices` : crée un BL **brouillon** pour chaque facture validée (approved/partial/paid) qui n'en a aucun, lignes copiées et rattachées via `documents.invoice_id`. Le détail facture affiche désormais la section « Bons de livraison » (BL liés + statut). Les livraisons partielles restent gérées par `/delivery-notes/new` (plafonnement au restant) |
+| **Notifications stock bas & factures en retard** | Route `POST /api/notifications/scan` : détecte les produits ≤ seuil et les factures ouvertes échues, crée des notifications in-app (`stock_low`, `invoice_overdue`) avec **anti-doublon 3 jours**. Nouveaux types dans la cloche. Bouton « 🔔 Générer les alertes » sur le tableau de bord, et cron Vercel quotidien (`vercel.json`, 07:00 UTC) |
+| **Relances clients automatisées** | Route `POST /api/invoices/remind` : email de relance au client via Resend (niveaux 1→3, ton croissant), délai de carence 7 jours, historique dans la table `invoice_reminders`. UI : boutique « ✉️ Relancer les retards » + action par ligne sur `/invoices`, et bouton « Relancer maintenant » + historique sur le détail facture. Cron Vercel quotidien (08:00 UTC) |
+| **Planification d'inventaire** | `/stock/inventory` : bouton « 📅 Planifier » (date, responsable, périmètre, comptage à l'aveugle) → séance au statut `planned`, sans lignes. « ▶ Démarrer » fige le stock du moment et passe en comptage (`draft`). KPIs planifiés / en cours / en retard et rappel du prochain inventaire |
+
+**Automatisation** : les deux routes acceptent soit une session manager (ceo/manager/admin), soit `Authorization: Bearer $CRON_SECRET` pour les tâches planifiées. Définir `CRON_SECRET` dans les variables d'environnement Vercel pour activer les crons ; sinon utiliser les boutons manuels. Les relances email nécessitent `RESEND_API_KEY`.
+
+**Logique testée** : `lib/clients/reminders.ts` (soldes, retard, niveaux, carence, emails), `lib/stock/alerts.ts` (seuils, réappro conseillé, anti-doublon), `lib/stock/inventorySchedule.ts` (planification) — 28 tests unitaires.
 
 
 ---

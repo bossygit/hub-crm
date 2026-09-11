@@ -14,6 +14,13 @@ const statusConfig: Record<string, { label: string; badge: string; icon: string 
   cancelled: { label: 'Annulée',             badge: 'badge-red',   icon: '❌' },
 }
 
+/** Facture ouverte dont l'échéance est dépassée. */
+function isOverdueInvoice(inv: { status?: string; due_date?: string | null }): boolean {
+  if (!['pending', 'approved', 'partial'].includes(inv.status || '')) return false
+  if (!inv.due_date) return false
+  return new Date(inv.due_date) < new Date()
+}
+
 export default function InvoicesPage() {
   const [invoices, setInvoices] = useState<any[]>([])
   const [summary, setSummary] = useState({ total: 0, paid: 0, pending: 0, approved: 0, partial: 0, draft: 0, revenue: 0, outstanding: 0, approvedAmount: 0, partialAmount: 0 })
@@ -21,6 +28,7 @@ export default function InvoicesPage() {
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [duplicating, setDuplicating] = useState<string | null>(null)
+  const [busy, setBusy] = useState<'remind' | 'bl' | null>(null)
   const supabase = createClient()
   const { toast } = useToast()
 
@@ -30,7 +38,8 @@ export default function InvoicesPage() {
       .from('invoices')
       .select('*, client:clients(id,name,email,phone)')
       .order('created_at', { ascending: false })
-    if (statusFilter !== 'all') q = q.eq('status', statusFilter)
+    // « late » est un filtre calculé côté client (échéance dépassée).
+    if (statusFilter !== 'all' && statusFilter !== 'late') q = q.eq('status', statusFilter)
     const { data } = await q
     const inv = data || []
     setInvoices(inv)
@@ -85,10 +94,80 @@ export default function InvoicesPage() {
     else { toast('success', 'Facture supprimée.'); load() }
   }
 
+  // Relance les factures validées en retard (aperçu puis confirmation).
+  async function runReminders(invoiceIds?: string[]) {
+    setBusy('remind')
+    try {
+      const preview = await fetch('/api/invoices/remind', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dryRun: true, invoice_ids: invoiceIds }),
+      }).then(r => r.json())
+
+      if (!preview?.ok) throw new Error(preview?.error || 'Aperçu impossible.')
+      if (!preview.ready) {
+        toast('warning', preview.emailConfigured === false
+          ? 'RESEND_API_KEY non configurée — relances email indisponibles.'
+          : 'Aucune relance à envoyer (délai de carence ou aucun client avec email).')
+        return
+      }
+      if (!confirm(`Envoyer ${preview.ready} relance(s) client par email ?`)) return
+
+      const result = await fetch('/api/invoices/remind', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ invoice_ids: invoiceIds }),
+      }).then(r => r.json())
+
+      if (!result?.ok) throw new Error(result?.error || 'Envoi impossible.')
+      toast(result.failed ? 'warning' : 'success', `${result.sent} relance(s) envoyée(s)${result.failed ? `, ${result.failed} échec(s)` : ''}.`)
+      load()
+    } catch (e) {
+      toast('error', e instanceof Error ? e.message : 'Erreur inattendue.')
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  // Génère les bons de livraison manquants pour les factures validées.
+  async function generateDeliveryNotes() {
+    setBusy('bl')
+    try {
+      const preview = await fetch('/api/delivery-notes/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dryRun: true }),
+      }).then(r => r.json())
+
+      if (!preview?.ok) throw new Error(preview?.error || 'Aperçu impossible.')
+      if (!preview.candidates) {
+        toast('success', 'Toutes les factures validées ont déjà un bon de livraison.')
+        return
+      }
+      if (!confirm(`Créer ${preview.candidates} bon(s) de livraison (brouillon) pour les factures sans BL ?`)) return
+
+      const result = await fetch('/api/delivery-notes/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      }).then(r => r.json())
+
+      if (!result?.ok) throw new Error(result?.error || 'Génération impossible.')
+      toast(result.failed ? 'warning' : 'success', `${result.created} BL créé(s)${result.failed ? `, ${result.failed} échec(s)` : ''}.`)
+    } catch (e) {
+      toast('error', e instanceof Error ? e.message : 'Erreur inattendue.')
+    } finally {
+      setBusy(null)
+    }
+  }
+
   const filtered = invoices.filter(inv => {
+    if (statusFilter === 'late' && !isOverdueInvoice(inv)) return false
     const q = search.toLowerCase()
     return !q || inv.invoice_number?.toLowerCase().includes(q) || inv.client?.name?.toLowerCase().includes(q)
   })
+
+  const overdueCount = invoices.filter(isOverdueInvoice).length
 
   return (
     <div className="invoice-page invoice-page--list">
@@ -146,6 +225,7 @@ export default function InvoicesPage() {
               { key: 'approved', label: '✅ Validées' },
               { key: 'partial', label: '🟣 Partiel' },
               { key: 'paid', label: '💚 Payées' },
+              { key: 'late', label: `⚠️ En retard${overdueCount ? ` (${overdueCount})` : ''}` },
               { key: 'cancelled', label: '❌ Annulées' },
             ].map(f => (
               <button
@@ -163,6 +243,18 @@ export default function InvoicesPage() {
           </div>
         </div>
 
+        {/* Actions d'automatisation (phase 2) */}
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
+          <button type="button" className="btn-ghost" disabled={busy !== null} onClick={() => runReminders()}
+            title="Envoie un email de relance aux clients dont la facture validée est en retard">
+            {busy === 'remind' ? '…' : `✉️ Relancer les retards${overdueCount ? ` (${overdueCount})` : ''}`}
+          </button>
+          <button type="button" className="btn-ghost" disabled={busy !== null} onClick={generateDeliveryNotes}
+            title="Crée un bon de livraison brouillon pour chaque facture validée qui n'en a pas">
+            {busy === 'bl' ? '…' : '🚚 Générer les BL manquants'}
+          </button>
+        </div>
+
         {/* Table */}
         <div className="invoice-list__table-wrap" style={{ background: 'white', borderRadius: 12, border: '1px solid #e8e4db', overflow: 'hidden' }}>
           {loading ? (
@@ -175,7 +267,7 @@ export default function InvoicesPage() {
               <tbody>
                 {filtered.map(inv => {
                   const cfg = statusConfig[inv.status] || statusConfig.draft
-                  const isOverdue = ['pending', 'approved', 'partial'].includes(inv.status) && inv.due_date && new Date(inv.due_date) < new Date()
+                  const isOverdue = isOverdueInvoice(inv)
                   return (
                     <tr key={inv.id} className="invoice-list__row">
                       <td>
@@ -204,6 +296,10 @@ export default function InvoicesPage() {
                         <div className="invoice-list__row-actions" style={{ display: 'flex', gap: 6 }}>
                           <Link href={`/invoices/${inv.id}`} className="btn-ghost invoice-btn invoice-btn--view-row" style={{ padding: '5px 10px', fontSize: '0.75rem', textDecoration: 'none' }}>Voir</Link>
                           <Link href={`/invoices/new?duplicate=${inv.id}`} className="btn-ghost invoice-btn invoice-btn--duplicate-row" style={{ padding: '5px 10px', fontSize: '0.75rem', textDecoration: 'none' }}>📋 Dupliquer</Link>
+                          {isOverdue && ['approved', 'partial'].includes(inv.status) && (
+                            <button className="btn-ghost" disabled={busy !== null} style={{ padding: '5px 10px', fontSize: '0.75rem' }}
+                              title="Relancer ce client par email" onClick={() => runReminders([inv.id])}>✉️</button>
+                          )}
                           {inv.status === 'draft' && (
                             <button className="btn-danger" style={{ padding: '5px 10px', fontSize: '0.75rem' }} onClick={() => handleDelete(inv.id)}>🗑️</button>
                           )}

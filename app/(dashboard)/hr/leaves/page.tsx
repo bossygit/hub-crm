@@ -17,6 +17,7 @@ import {
   overloadedDays,
   workingDays,
 } from '@/lib/hr/leaves'
+import { EMPLOYEE_ACTIVE_STATUSES } from '@/lib/hr/employees'
 
 const statusConfig: Record<string, { label: string; badge: string; icon: string }> = {
   draft: { label: 'Brouillon', badge: 'badge-gray', icon: '✏️' },
@@ -65,7 +66,7 @@ export default function LeavesPage() {
       supabase.from('employee_documents').select('*, employee:employees(id,full_name,position,department)')
         .eq('type', 'conge').order('created_at', { ascending: false }),
       supabase.from('leave_balances').select('*, employee:employees(id,full_name,department)').order('year', { ascending: false }),
-      supabase.from('employees').select('*').eq('status', 'actif').order('full_name'),
+      supabase.from('employees').select('*').in('status', EMPLOYEE_ACTIVE_STATUSES).order('full_name'),
     ])
     if (leavesRes.error || balRes.error || empRes.error) toast('error', 'Erreur de chargement des congés.')
     setLeaves(leavesRes.data || []); setBalances(balRes.data || []); setEmployees(empRes.data || []); setLoading(false)

@@ -1,13 +1,24 @@
 import { createClient } from '@/lib/supabase/server'
 import { resend } from '@/lib/resend'
+import type { SupabaseClient } from '@supabase/supabase-js'
 
-type NotificationType = 'invoice_pending' | 'bl_pending' | 'leave_pending' | 'quote_pending'
+type NotificationType =
+  | 'invoice_pending' | 'bl_pending' | 'leave_pending' | 'quote_pending'
+  | 'quote_approved' | 'quote_rejected' | 'quote_converted'
+  | 'stock_low' | 'invoice_overdue' | 'reminder_sent' | 'inventory_planned'
 
 const typeLabels: Record<NotificationType, string> = {
   invoice_pending: 'Facture en attente de validation',
   bl_pending: 'Bon de livraison en attente',
   leave_pending: 'Demande de conge en attente',
   quote_pending: 'Devis en attente de validation',
+  quote_approved: 'Devis accepte',
+  quote_rejected: 'Devis refuse',
+  quote_converted: 'Devis converti en facture',
+  stock_low: 'Stock bas',
+  invoice_overdue: 'Facture en retard',
+  reminder_sent: 'Relance client envoyee',
+  inventory_planned: 'Inventaire planifie',
 }
 
 const typeIcons: Record<NotificationType, string> = {
@@ -15,6 +26,13 @@ const typeIcons: Record<NotificationType, string> = {
   bl_pending: '🚚',
   leave_pending: '🏖',
   quote_pending: '📝',
+  quote_approved: '✅',
+  quote_rejected: '❌',
+  quote_converted: '🔄',
+  stock_low: '📦',
+  invoice_overdue: '⏰',
+  reminder_sent: '✉️',
+  inventory_planned: '📋',
 }
 
 export async function createNotification(params: {
@@ -24,8 +42,12 @@ export async function createNotification(params: {
   referenceId: string
   referenceType: string
   link: string
+  /** false = notification in-app uniquement (évite l'envoi d'email). */
+  sendEmail?: boolean
+  /** Client explicite (service role pour une tâche planifiée) ; sinon session. */
+  client?: SupabaseClient
 }) {
-  const supabase = await createClient()
+  const supabase = params.client || (await createClient())
 
   let recipients: { id: string; email?: string; full_name?: string }[] = []
 
@@ -59,7 +81,8 @@ export async function createNotification(params: {
 
   let emailed = 0
   const resendKey = process.env.RESEND_API_KEY
-  if (resendKey && resendKey !== 're_your-resend-api-key-here') {
+  const emailEnabled = params.sendEmail !== false
+  if (emailEnabled && resendKey && resendKey !== 're_your-resend-api-key-here') {
     const appBase =
       (process.env.NEXT_PUBLIC_APP_URL || '').replace(/\/$/, '') ||
       (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')

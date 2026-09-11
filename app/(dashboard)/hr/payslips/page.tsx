@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/client'
 import type { Employee } from '@/types'
 import { useToast } from '@/components/ui/Toast'
 import { generatePayslipPDF } from '@/lib/pdf/generatePayslipPDF'
+import { EMPLOYEE_ACTIVE_STATUSES } from '@/lib/hr/employees'
 
 const months = ['Janvier', 'Fevrier', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Aout', 'Septembre', 'Octobre', 'Novembre', 'Decembre']
 
@@ -30,7 +31,7 @@ export default function PayslipsPage() {
     const [docsRes, empRes] = await Promise.all([
       supabase.from('employee_documents').select('*, employee:employees(id,full_name,position,department,employee_number)')
         .eq('type', 'fiche_paie').order('created_at', { ascending: false }),
-      supabase.from('employees').select('*').eq('status', 'actif').order('full_name'),
+      supabase.from('employees').select('*').in('status', EMPLOYEE_ACTIVE_STATUSES).order('full_name'),
     ])
     if (docsRes.error || empRes.error) toast('error', 'Erreur de chargement des bulletins.')
     setDocs(docsRes.data || []); setEmployees(empRes.data || []); setLoading(false)

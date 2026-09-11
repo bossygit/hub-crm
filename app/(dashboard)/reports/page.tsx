@@ -10,6 +10,7 @@ import {
   withRunningBalance,
 } from '@/lib/reports/ledger'
 import JournalExports from './JournalExports'
+import { EMPLOYEE_ACTIVE_STATUSES } from '@/lib/hr/employees'
 
 export const dynamic = 'force-dynamic'
 
@@ -66,7 +67,7 @@ export default async function ReportsPage({
     supabase.from('products').select('id, name, quantity, threshold_alert, unit, price_per_unit'),
     supabase.from('product_batches').select('id, product_id, batch_number, quantity, expiry_date, product:products(name)'),
     supabase.from('stock_movements').select('type, quantity, created_at').gte('created_at', startOfMonthIso),
-    supabase.from('employees').select('*', { count: 'exact', head: true }).eq('status', 'actif'),
+    supabase.from('employees').select('*', { count: 'exact', head: true }).in('status', EMPLOYEE_ACTIVE_STATUSES),
     supabase.from('documents').select('id, title, type, status, created_at').eq('status', 'pending'),
     supabase.from('document_requests').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
     supabase.from('purchases').select('id, purchase_number, supplier_id, date, status, subtotal'),

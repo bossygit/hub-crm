@@ -14,6 +14,7 @@ import {
   todayKey,
   workedHours,
 } from '@/lib/hr/attendance'
+import { EMPLOYEE_ACTIVE_STATUSES } from '@/lib/hr/employees'
 import { MONTH_NAMES } from '@/lib/hr/leaves'
 
 type Draft = { status: string; check_in: string; check_out: string; notes: string }
@@ -52,7 +53,7 @@ export default function AttendancePage() {
     const { data, error } = await supabase
       .from('employees')
       .select('*')
-      .neq('status', 'sorti')
+      .in('status', EMPLOYEE_ACTIVE_STATUSES)
       .order('full_name')
     if (error) toast('error', 'Erreur de chargement des employés.')
     setEmployees(data || [])

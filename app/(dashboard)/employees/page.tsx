@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/client'
 import Link from 'next/link'
 import { useToast } from '@/components/ui/Toast'
 import type { Employee } from '@/types'
+import { normalizeEmployeeStatus } from '@/lib/hr/employees'
 
 const statusColors: Record<string, string> = { actif: 'badge-green', conge: 'badge-amber', suspendu: 'badge-red', sorti: 'badge-gray' }
 const statusLabels: Record<string, string> = { actif: '● Actif', conge: '⏸ En congé', suspendu: '⚠ Suspendu', sorti: '○ Sorti' }
@@ -148,7 +149,7 @@ export default function EmployeesPage() {
 
   function openEdit(emp: Employee) {
     setEditing(emp)
-    setForm({ full_name: emp.full_name, position: emp.position, department: emp.department, email: emp.email || '', phone: emp.phone || '', hire_date: emp.hire_date, contract_type: emp.contract_type, salary: emp.salary || 0, status: emp.status, address: emp.address || '', notes: emp.notes || '', employee_number: emp.employee_number || '' })
+    setForm({ full_name: emp.full_name, position: emp.position, department: emp.department, email: emp.email || '', phone: emp.phone || '', hire_date: emp.hire_date, contract_type: emp.contract_type, salary: emp.salary || 0, status: normalizeEmployeeStatus(emp.status), address: emp.address || '', notes: emp.notes || '', employee_number: emp.employee_number || '' })
     setShowModal(true)
     void loadLinkInfo(emp.id)
   }
@@ -209,7 +210,7 @@ export default function EmployeesPage() {
         <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
           {['actif', 'conge', 'suspendu', 'sorti'].map(s => (
             <div key={s} style={{ background: 'white', padding: '10px 16px', borderRadius: 8, border: '1px solid #e8e4db', fontSize: '0.8rem' }}>
-              <strong>{employees.filter(e => e.status === s).length}</strong> {statusLabels[s]}
+              <strong>{employees.filter(e => normalizeEmployeeStatus(e.status) === s).length}</strong> {statusLabels[s]}
             </div>
           ))}
         </div>
@@ -235,7 +236,7 @@ export default function EmployeesPage() {
                       <td><span className="badge badge-gray">{emp.department}</span></td>
                       <td><span className="badge badge-blue">{contractLabels[emp.contract_type]}</span></td>
                       <td style={{ fontSize: '0.8rem', color: '#666' }}>{new Date(emp.hire_date).toLocaleDateString('fr-FR')}</td>
-                      <td><span className={`badge ${statusColors[emp.status]}`}>{statusLabels[emp.status]}</span></td>
+                      <td><span className={`badge ${statusColors[normalizeEmployeeStatus(emp.status)]}`}>{statusLabels[normalizeEmployeeStatus(emp.status)]}</span></td>
                       <td onClick={e => e.stopPropagation()}>
                         <div style={{ display: 'flex', gap: 6 }}>
                           <button className="btn-ghost" style={{ padding: '5px 10px', fontSize: '0.75rem' }} onClick={() => openEdit(emp)}>✏️</button>
@@ -258,7 +259,7 @@ export default function EmployeesPage() {
                 <div style={{ fontSize: '2rem', marginBottom: 4 }}>👤</div>
                 <div style={{ fontWeight: 700, fontSize: '1.1rem' }}>{selected.full_name}</div>
                 <div style={{ opacity: 0.8, fontSize: '0.85rem' }}>{selected.position} · {selected.department}</div>
-                <div style={{ marginTop: 6 }}><span className={`badge ${statusColors[selected.status]}`}>{statusLabels[selected.status]}</span></div>
+                <div style={{ marginTop: 6 }}><span className={`badge ${statusColors[normalizeEmployeeStatus(selected.status)]}`}>{statusLabels[normalizeEmployeeStatus(selected.status)]}</span></div>
               </div>
               <div style={{ padding: '16px' }}>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 16 }}>
