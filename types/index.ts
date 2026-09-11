@@ -69,6 +69,24 @@ export interface DocumentItem {
 export interface Employee {
   id: string; user_id?: string; employee_number?: string; full_name: string; position: string; department: string; email?: string; phone?: string; hire_date: string; contract_type: 'cdi' | 'cdd' | 'stage' | 'freelance'; salary?: number; status: EmployeeStatus; address?: string; notes?: string; created_at: string
 }
+export type AttendanceStatus = 'present' | 'absent' | 'late' | 'leave' | 'holiday'
+
+export interface Attendance {
+  id: string
+  employee_id: string
+  employee?: Employee
+  date: string
+  status: AttendanceStatus
+  check_in?: string | null
+  check_out?: string | null
+  hours_worked?: number | null
+  overtime_hours?: number | null
+  notes?: string | null
+  created_by?: string | null
+  created_at: string
+  updated_at?: string | null
+}
+
 export interface EmployeeDocument {
   id: string; employee_id: string; employee?: Employee; type: string; title: string; file_url?: string; document_id?: string; issued_date: string; created_at: string
   content?: Record<string, unknown>; status?: 'draft' | 'pending' | 'approved' | 'rejected'

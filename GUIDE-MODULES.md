@@ -29,7 +29,8 @@ HUB Distribution CRM
 │   ├── Contrats ............... Generation de contrats de travail
 │   ├── Attestations ........... Attestations de travail
 │   ├── Fiches de paie ......... Bulletins de salaire
-│   ├── Conges ................. Demandes + approbation + soldes
+│   ├── Conges ................. Demandes + approbation + soldes + calendrier
+│   ├── Presences & pointage ... Feuille du jour + heures + historique mensuel
 │   └── Recrutement ............ Offres d'emploi + candidatures
 ├── Notifications .............. Cloche in-app + emails (Resend)
 └── Portail Public ............. Interface partenaires/candidats
@@ -230,14 +231,37 @@ Fichier client complet.
 - Soumission de demande : employe, type (annuel, maladie, sans solde, exceptionnel, maternite), dates, motif
 - Calcul automatique des jours ouvres
 - Workflow : `En attente` → `Approuve` / `Refuse`
-- L'approbation met a jour automatiquement le **solde de conges** de l'employe (via trigger SQL)
-- Onglet "Soldes conges" : vue par employe du total/utilise/restant
+- **Garde-fou anti-chevauchement** : une demande ne peut pas recouvrir une autre demande en attente ou approuvee du meme employe (blocage cote UI, avertissement visible dans la modale)
+- **Garde-fou de solde** : le solde restant est verifie avant soumission pour les conges qui debitent le solde
+- Onglets **Demandes** / **Soldes conges** / **Calendrier equipe**
+- Onglet "Soldes conges" : vue par employe du droit / utilise / restant, ajustement du **droit annuel** par annee et bouton "Initialiser les soldes" (RPC `hr_ensure_leave_balances`)
+- Onglet "Calendrier equipe" : grille mensuelle (semaines lundi→dimanche), conges approuves (vert) et en attente (ambre), navigation mois precedent/suivant, alerte "effectif reduit" au-dela d'un seuil de salaries en conge le meme jour
+
+**Regle de solde (important) :** seul le **conge annuel** debite `leave_balances.used_days`. Maladie, sans solde, maternite et exceptionnel sont suivis **hors solde**. Cette regle vit a un seul endroit cote serveur (`hr_is_balance_leave`) et est mirrorée dans `lib/hr/leaves.ts` (`consumesBalance`).
 
 **Notification :** quand une demande est soumise, les admins/managers recoivent une notification.
 
+**Self-service salarie** (`/me/conges`) : soldes, demande, suivi, detection de chevauchement.
+
 ---
 
-## 14. Systeme de Notifications
+## 14. Presences & pointage (`/hr/attendance`)
+
+Feuille de presence quotidienne et suivi mensuel.
+
+**Fonctionnalites :**
+- **Feuille du jour** : un selecteur de date, une ligne par employe actif avec statut (present, retard, absent, conge, ferie), heure d'arrivee / de depart, notes
+- **Heures calculees automatiquement** depuis les pointages (service de nuit gere) + **heures supplementaires** au-dela de 8 h
+- Actions rapides : "Tout present", "Vider", enregistrement en lot (upsert sur `employee_id + date`)
+- KPIs du jour : presents, retards, absents, en conge, heures totales
+- **Historique mensuel** : selection du mois, totaux par employe (jours pointes, jours travailles, presents, retards, absences, conges, feries, heures, heures sup)
+- Les conges approuves peuvent etre reportes manuellement en statut "conge" dans la feuille (le module ne les synchronise pas automatiquement)
+
+**Base :** table `attendance` — une ligne par employe et par jour (contrainte unique), RLS : ecriture reservee aux roles RH, un salarie peut lire ses propres pointages.
+
+---
+
+## 15. Systeme de Notifications
 
 Deux canaux complementaires :
 
@@ -259,7 +283,7 @@ Deux canaux complementaires :
 
 ---
 
-## 15. Autres modules
+## 16. Autres modules
 
 | Module | Description |
 |--------|-------------|
@@ -309,6 +333,7 @@ Deux canaux complementaires :
 | `employees` | Employes |
 | `employee_documents` | Contrats, attestations, fiches de paie, conges |
 | `leave_balances` | Soldes de conges par employe/annee |
+| `attendance` | Presences / pointage : 1 ligne par employe et par jour |
 | `notifications` | Notifications in-app |
 | `jobs` | Offres d'emploi |
 | `candidates` | Candidatures |
@@ -350,6 +375,10 @@ Patches audit septembre 2026 (apres 1-14, dans l'ordre) :
 26. `fix-candidates-cv.sql` — Recrutement : bucket cvs pour CV
 27. `fix-employee-selfservice.sql` — Conges self-service : policies RLS self_* + user_id employes
 
+Patches RH lot 1 (apres 27) :
+
+28. `20260909170001_audit_28_hr_attendance_leave_balances.sql` — **Presences & pointage** (FK `attendance.employee_id` rebranchee sur `employees`, colonnes check_in/check_out/hours_worked/overtime_hours, RLS RH + lecture self) et **fiabilisation des soldes de conges** : seul le conge annuel debite, recalcul idempotent a l'insertion/modification/**suppression**, RPC `hr_ensure_leave_balances`
+
 ---
 
 ## Roles et permissions
@@ -390,7 +419,8 @@ comblees. A deployer : executer les nouveaux patches SQL listes ci-dessous (sect
 | Portail public | **Catalogue produits + commande** (panier, `portal_orders`) + page interne "Commandes portail" pour le suivi |
 | Employes | Correction types TS + liaison employe ↔ compte utilisateur (endpoint admin `link-employee`, invite si cle service) |
 | Contrats / Attestations / Fiches de paie | (deja 8/10 — conserves) |
-| Conges | **Self-service salarie** : page "Mes congés" (`/me/conges`) — soldes, demande, suivi — policies RLS `self_*` etroites |
+| Conges | **Self-service salarie** : page "Mes congés" (`/me/conges`) — soldes, demande, suivi — policies RLS `self_*` etroites. **Lot RH 1** : calendrier d'equipe, garde-fous chevauchement/solde, seul le conge annuel debite, recalcul idempotent (suppression et modification des dates incluses), droit annuel ajustable, RPC d'initialisation des soldes |
+| Presences | **Lot RH 1** : nouveau module `/hr/attendance` — feuille du jour (statuts, heures, heures sup), actions rapides, KPIs et historique mensuel par employe ; table `attendance` corrigee (FK employees) et RLS durcie |
 | Recrutement | Upload CV branche sur le storage (bucket `cvs`), apercu/telechargement, correction types TS |
 | Roles | Gestion statut actif/inactif, garde-fous (pas d'auto-demotion, dernier admin protege), recherche |
 | Notifications | Cloche robuste : nouveaux types devis, "Tout marquer comme lu", compteur reel, fallback types inconnus |

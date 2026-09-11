@@ -286,6 +286,7 @@ export default function EmployeesPage() {
                       { href: '/hr/certificates', icon: '🏛', label: 'Attestations' },
                       { href: '/hr/payslips', icon: '💵', label: 'Fiches paie' },
                       { href: '/hr/leaves', icon: '🏖', label: 'Conges' },
+                      { href: '/hr/attendance', icon: '🕒', label: 'Presences' },
                     ].map(link => (
                       <Link key={link.href} href={link.href} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 10px', background: '#f8f5ee', borderRadius: 6, textDecoration: 'none', color: '#555', fontSize: '0.78rem', fontWeight: 600 }}>
                         <span>{link.icon}</span> {link.label}

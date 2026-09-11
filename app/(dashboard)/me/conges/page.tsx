@@ -3,14 +3,14 @@ import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useToast } from '@/components/ui/Toast'
 import type { Employee } from '@/types'
-
-const leaveTypes: Record<string, string> = {
-  annuel: 'Conge annuel',
-  maladie: 'Conge maladie',
-  sans_solde: 'Sans solde',
-  exceptionnel: 'Conge exceptionnel',
-  maternite: 'Maternite/Paternite',
-}
+import {
+  LEAVE_TYPE_LIST,
+  findOverlappingLeave,
+  leaveConsumesBalance,
+  leaveTypeLabel,
+  leaveYearOf,
+  workingDays,
+} from '@/lib/hr/leaves'
 
 const statusConfig: Record<string, { label: string; badge: string; icon: string }> = {
   draft: { label: 'Brouillon', badge: 'badge-gray', icon: '✏️' },
@@ -20,20 +20,6 @@ const statusConfig: Record<string, { label: string; badge: string; icon: string 
 }
 
 const emptyForm = { leave_type: 'annuel', start_date: '', end_date: '', reason: '' }
-
-// Même logique de jours ouvrés que la page RH /hr/leaves.
-function workingDays(start: string, end: string): number {
-  if (!start || !end) return 0
-  let count = 0
-  const d = new Date(start)
-  const e = new Date(end)
-  while (d <= e) {
-    const dow = d.getDay()
-    if (dow !== 0 && dow !== 6) count++
-    d.setDate(d.getDate() + 1)
-  }
-  return count
-}
 
 function fmtDate(d?: string | null): string {
   if (!d) return '—'
@@ -104,19 +90,14 @@ export default function MyCongesPage() {
   const balCurrent = balances.find(b => b.year === currentYear)
 
   function yearOf(d: string): number {
-    const y = new Date(d).getFullYear()
-    return Number.isFinite(y) ? y : currentYear
+    return leaveYearOf(d, currentYear)
   }
 
   const days = workingDays(form.start_date, form.end_date)
+  const formConsumes = leaveConsumesBalance(form.leave_type)
 
-  function overlapsExisting(): boolean {
-    if (!form.start_date || !form.end_date) return false
-    return leaves.some(l =>
-      (l.status === 'pending' || l.status === 'approved') &&
-      l.start_date && l.end_date &&
-      l.start_date <= form.end_date && l.end_date >= form.start_date
-    )
+  function overlappingLeave() {
+    return findOverlappingLeave(leaves, form.start_date, form.end_date)
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -131,18 +112,19 @@ export default function MyCongesPage() {
       setFormError('La date de fin doit être postérieure ou égale à la date de début.')
       return
     }
-    if (overlapsExisting()) {
-      setFormError('Une demande en attente ou approuvee couvre deja cette periode.')
+    const overlap = overlappingLeave()
+    if (overlap) {
+      setFormError(`Une demande ${overlap.status === 'approved' ? 'approuvee' : 'en attente'} couvre deja cette periode.`)
       return
     }
     const balYear = balances.find(b => b.year === yearOf(form.start_date))
-    if (form.leave_type === 'annuel' && balYear && days > balYear.remaining_days) {
-      setFormError(`Solde annuel ${yearOf(form.start_date)} insuffisant : ${balYear.remaining_days}j restants pour ${days}j demandes.`)
+    if (formConsumes && balYear && days > balYear.remaining_days) {
+      setFormError(`Solde ${yearOf(form.start_date)} insuffisant : ${balYear.remaining_days}j restants pour ${days}j demandes.`)
       return
     }
 
     setSaving(true)
-    const title = `${leaveTypes[form.leave_type] || form.leave_type} — ${emp.full_name} (${days}j)`
+    const title = `${leaveTypeLabel(form.leave_type)} — ${emp.full_name} (${days}j)`
     const payload = {
       employee_id: emp.id,
       type: 'conge',
@@ -180,7 +162,7 @@ export default function MyCongesPage() {
           body: JSON.stringify({
             type: 'leave_pending',
             title: `Demande de conge — ${emp.full_name}`,
-            message: `${leaveTypes[form.leave_type] || form.leave_type} du ${form.start_date} au ${form.end_date} (${days} jours)`,
+            message: `${leaveTypeLabel(form.leave_type)} du ${form.start_date} au ${form.end_date} (${days} jours)`,
             referenceId: newLeave.id,
             referenceType: 'leave',
             link: '/hr/leaves',
@@ -278,7 +260,7 @@ export default function MyCongesPage() {
                   <div className="hub-form-group">
                     <label>Type de congé</label>
                     <select className="hub-select" value={form.leave_type} onChange={e => setForm(f => ({ ...f, leave_type: e.target.value }))}>
-                      {Object.entries(leaveTypes).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                      {LEAVE_TYPE_LIST.map(t => <option key={t.code} value={t.code}>{t.label}{t.consumesBalance ? '' : ' (hors solde)'}</option>)}
                     </select>
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
@@ -297,6 +279,7 @@ export default function MyCongesPage() {
                   {days > 0 && (
                     <div style={{ padding: '10px 14px', background: '#ecfdf5', borderRadius: 8, border: '1px solid #a7f3d0', fontSize: '0.875rem', marginBottom: 12 }}>
                       📅 Durée : <strong>{days} jour(s) ouvré(s)</strong>
+                      {!formConsumes && <span style={{ color: '#666' }}> — {leaveTypeLabel(form.leave_type)} ne débite pas votre solde annuel</span>}
                     </div>
                   )}
 
@@ -335,7 +318,7 @@ export default function MyCongesPage() {
                       return (
                         <div key={l.id} style={{ padding: '12px 16px', borderBottom: '1px solid #f0ece4', fontSize: '0.85rem' }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                            <span style={{ fontWeight: 600 }}>🏖 {leaveTypes[(c as any).leave_type] || (c as any).leave_type || '—'}</span>
+                            <span style={{ fontWeight: 600 }}>🏖 {leaveTypeLabel((c as any).leave_type)}</span>
                             <span className={`badge ${cfg.badge}`}>{cfg.icon} {cfg.label}</span>
                           </div>
                           <div style={{ color: '#666', marginTop: 4 }}>

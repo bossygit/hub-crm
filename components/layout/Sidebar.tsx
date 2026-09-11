@@ -57,6 +57,7 @@ const nav: { section: string; items: NavItem[]; roles?: UserRole[] }[] = [
       { href: '/hr/certificates', icon: '🏛', label: 'Attestations' },
       { href: '/hr/payslips', icon: '💵', label: 'Fiches de paie' },
       { href: '/hr/leaves', icon: '🏖', label: 'Congés' },
+      { href: '/hr/attendance', icon: '🕒', label: 'Présences & pointage' },
       { href: '/recruitment', icon: '🎯', label: 'Recrutement' },
     ]
   },
