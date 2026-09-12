@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import Sidebar from '@/components/layout/Sidebar'
-import NotificationBell from '@/components/NotificationBell'
+import HeaderBar from '@/components/layout/HeaderBar'
 import ConnectivityBanner from '@/components/ConnectivityBanner'
 import { homeForRole } from '@/lib/auth/access'
 
@@ -12,7 +12,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('role')
+    .select('role, full_name')
     .eq('id', user.id)
     .single()
 
@@ -23,12 +23,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
       <ConnectivityBanner />
       <Sidebar />
       <div className="main-content">
-        <div style={{
-          display: 'flex', justifyContent: 'flex-end', alignItems: 'center',
-          padding: '8px 24px 0', gap: 12,
-        }}>
-          <NotificationBell />
-        </div>
+        <HeaderBar fullName={profile?.full_name} role={profile?.role} email={user.email} />
         {children}
       </div>
     </div>

@@ -31,7 +31,10 @@ body {
 /* Sidebar */
 .sidebar {
   background: var(--hub-ink);
-  min-height: 100vh;
+  /* Hauteur bornée : la navigation défile en interne et le pied (déconnexion)
+     reste toujours visible, même avec beaucoup de menus. */
+  height: 100vh;
+  height: 100dvh;
   width: 260px;
   position: fixed;
   left: 0;
@@ -39,6 +42,7 @@ body {
   z-index: 50;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
   border-right: 1px solid rgba(255, 255, 255, 0.08);
   box-shadow: 12px 0 32px rgba(13, 35, 42, 0.07);
 }
@@ -613,4 +617,116 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
+}
+
+/* ── Barre supérieure : notifications + compte (déconnexion) ───────── */
+/* Le bouton de déconnexion doit rester accessible partout, y compris
+   lorsque la sidebar est masquée sur mobile. */
+.header-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 24px 0;
+}
+
+.nav-toggle {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  border: 1px solid #e8e4db;
+  background: white;
+  color: var(--hub-green);
+  cursor: pointer;
+}
+.nav-toggle:hover { background: #f8f5ee; }
+
+.user-menu-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 240px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  border: 1px solid #e8e4db;
+  background: white;
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #333;
+}
+.user-menu-trigger:hover { background: #f8f5ee; }
+
+.user-menu-avatar {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--hub-green);
+  color: white;
+  font-size: 0.68rem;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+
+.user-menu-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.user-menu-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 240px;
+  background: white;
+  border: 1px solid #e8e4db;
+  border-radius: 12px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
+  z-index: 1000;
+  overflow: hidden;
+}
+
+.user-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 12px 14px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #991b1b;
+  text-align: left;
+}
+.user-menu-item:hover { background: #fef2f2; }
+.user-menu-item:disabled { opacity: 0.6; cursor: wait; }
+
+.sidebar-backdrop { display: none; }
+
+/* Navigation mobile : la sidebar est masquée, on la rouvre par le menu. */
+@media (max-width: 768px) {
+  .nav-toggle { display: inline-flex; }
+  .header-bar { padding: 10px 16px 0; }
+  .user-menu-name { display: none; }
+
+  .sidebar { transition: transform 0.2s ease; }
+
+  .sidebar-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    padding: 0;
+    border: none;
+    background: rgba(13, 35, 42, 0.45);
+    z-index: 45;
+    cursor: pointer;
+  }
+
+  body.sidebar-open .sidebar {
+    transform: translateX(0);
+    box-shadow: 0 0 40px rgba(0, 0, 0, 0.35);
+  }
 }
