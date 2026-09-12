@@ -6,3 +6,4 @@ node_modules/
 *.log
 supabase/.temp/
 tsconfig.tsbuildinfo
+.playwright-cli/
