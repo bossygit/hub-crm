@@ -22,11 +22,21 @@ export type ManagerAuth =
   | { client: SupabaseClient; viaCron: boolean; userId: string | null }
   | { error: NextResponse }
 
-export async function authorizeManager(req: NextRequest): Promise<ManagerAuth> {
+/**
+ * Garde paramétrable. `options.allowCron` (défaut true) autorise l'appel par
+ * une tâche planifiée — à désactiver pour les routes coûteuses (ex. assistant
+ * IA) qui ne doivent être déclenchées que par un utilisateur.
+ */
+export async function authorizeRoles(
+  req: NextRequest,
+  roles: string[],
+  options: { allowCron?: boolean } = {},
+): Promise<ManagerAuth> {
+  const allowCron = options.allowCron !== false
   const secret = process.env.CRON_SECRET
   const header = req.headers.get('authorization') || ''
 
-  if (secret && header === `Bearer ${secret}`) {
+  if (allowCron && secret && header === `Bearer ${secret}`) {
     const admin = createAdminClient()
     if (!admin) {
       return { error: NextResponse.json({ error: 'SUPABASE_SERVICE_ROLE_KEY manquante pour la tâche planifiée.' }, { status: 503 }) }
@@ -39,9 +49,13 @@ export async function authorizeManager(req: NextRequest): Promise<ManagerAuth> {
   if (!user) return { error: NextResponse.json({ error: 'Non authentifié' }, { status: 401 }) }
 
   const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).maybeSingle()
-  if (!profile || !MANAGER_ROLES.includes(profile.role)) {
+  if (!profile || !roles.includes(profile.role)) {
     return { error: NextResponse.json({ error: 'Accès réservé aux rôles direction/RH.' }, { status: 403 }) }
   }
 
   return { client: createAdminClient() || supabase, viaCron: false, userId: user.id }
+}
+
+export async function authorizeManager(req: NextRequest): Promise<ManagerAuth> {
+  return authorizeRoles(req, MANAGER_ROLES)
 }

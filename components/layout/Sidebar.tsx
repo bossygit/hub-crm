@@ -7,7 +7,7 @@ import Image from 'next/image'
 import {
   Archive, BarChart3, Beaker, BellRing, BriefcaseBusiness, Building2, ClipboardCheck,
   FileText, FolderKanban, Handshake, KeyRound, LayoutDashboard, Package,
-  ReceiptText, ScrollText, Send, Settings2, ShoppingCart, UsersRound, Warehouse,
+  ReceiptText, ScrollText, Send, Settings2, ShoppingCart, Sparkles, UsersRound, Warehouse,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import logoWhite from '../../app/assets/images/logo-white.png'
@@ -26,6 +26,7 @@ const nav: { section: string; items: NavItem[]; roles?: UserRole[] }[] = [
     section: 'Principal',
     items: [
       { href: '/dashboard', icon: LayoutDashboard, label: 'Tableau de bord' },
+      { href: '/assistant', icon: Sparkles, label: 'Assistant IA', roles: ['ceo', 'admin'] },
       { href: '/me/conges', icon: BriefcaseBusiness, label: 'Mes congés' },
       { href: '/reports', icon: BarChart3, label: 'Rapports', roles: ['ceo', 'manager', 'admin'] },
     ]

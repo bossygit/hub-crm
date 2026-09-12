@@ -463,7 +463,7 @@ Phase 2 de l'audit, **hors connexion au site e-commerce** (exclue volontairement
 
 ## Évolutions septembre 2026 — Phase 3 « Optimisation »
 
-Phase 3 de l'audit, **sans l'assistant IA** (exclu volontairement). Quatre chantiers livrés :
+Phase 3 de l'audit. Cinq chantiers livrés (l'assistant IA a été ajouté dans un second temps) :
 
 | Chantier | Livraison |
 |----------|-----------|
@@ -471,8 +471,13 @@ Phase 3 de l'audit, **sans l'assistant IA** (exclu volontairement). Quatre chant
 | **Réapprovisionnement automatisé** | `POST /api/purchases/reorder` : regroupe les produits sous seuil **par fournisseur** et crée un **bon de commande brouillon** par fournisseur (quantités conseillées, total estimé). Les produits déjà en commande ouverte sont exclus ; ceux sans fournisseur sont signalés. Bouton « 🛒 Réapprovisionner » sur `/stock` et `/purchases` (aperçu + confirmation) |
 | **Segmentation clients** | Colonnes `clients.segment/segment_score/orders_count/lifetime_value/last_order_at` + `POST /api/clients/segment` (scoring **RFM** récence/fréquence/montant). Segments : VIP, Fidèle, Actif, Inactif, Prospect. Page **Clients** : colonne segment + score, filtre par segment, bouton « 🏷 Recalculer les segments ». Logique pure dans `lib/clients/segmentation.ts` |
 | **Portail partenaires** | Espace authentifié **`/portal/espace`** : le partenaire (compte relié à `clients.user_id`) consulte sa fiche, ses factures + solde dû, ses livraisons/documents et ses commandes portail. Accès depuis le portail public (« 🔐 Espace partenaire »). **Sécurité** : policies self strictes, et les policies `portal_orders` ont été durcies (l'ancienne laissait tout compte authentifié lire/modifier toutes les commandes) |
+| **AI CEO Assistant** | Page **`/assistant`** (rôles ceo/admin) : questions en langage naturel sur l'activité. `POST /api/ai/assistant` agrège **côté serveur** les données réelles (CA mois/année/12 mois, créances et retards nominatifs, stock et alertes, clients et segments, top clients, achats, commandes portail) et interroge un LLM **OpenAI-compatible**. Fournisseur abstrait (`lib/ai/provider.ts`) : **Ollama Cloud** (`gemma4:31b-cloud`) par défaut, **DeepSeek** par simple variable d'environnement. Aucune donnée brute ne quitte le serveur, rien n'est écrit en base, et l'assistant est consigné pour ne jamais inventer de chiffres |
 
-**Logique testée** : `lib/reports/charts.ts` (16 tests), `lib/clients/segmentation.ts` (12 tests), plus les helpers de réappro (`buildReorderPlan`, `openPurchaseProductIds`) — **281 tests** au total.
+**Logique testée** : `lib/reports/charts.ts` (16), `lib/clients/segmentation.ts` (12), `lib/ai/provider.ts` (12), `lib/ai/context.ts` (11), `lib/ai/assistant.ts` (7), plus les helpers de réappro (`buildReorderPlan`, `openPurchaseProductIds`) — **307 tests** au total.
+
+**Configuration de l'assistant** (variables d'environnement Vercel) :
+`OLLAMA_API_KEY` (obligatoire aujourd'hui) ; `AI_PROVIDER=ollama` et `AI_MODEL=gemma4:31b-cloud` (défauts) ; pour basculer plus tard sur DeepSeek : `AI_PROVIDER=deepseek`, `DEEPSEEK_API_KEY=…`, `AI_MODEL=deepseek-chat` — **aucun changement de code**. Surcharges `AI_BASE_URL`. Sans clé, l'API répond 503 avec un message explicite.
+
 
 
 ---
