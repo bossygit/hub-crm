@@ -16,6 +16,7 @@ export type StockProduct = {
   unit: string
   threshold_alert: number
   price_per_unit?: number | null
+  supplier_id?: string | null
 }
 
 export type LowStockAlert = {
@@ -109,4 +110,98 @@ export function stockAlertMessage(alert: LowStockAlert): string {
   const { product } = alert
   const unit = product.unit || 'unité'
   return `Stock bas : ${Number(product.quantity) || 0} ${unit} (seuil ${Number(product.threshold_alert) || 0}). Réapprovisionnement conseillé : ${alert.suggestedOrder} ${unit}.`
+}
+
+// ── Réapprovisionnement automatique ─────────────────────────────────
+
+export type ReorderSupplier = { id: string; name: string }
+
+export type ReorderPlanItem = {
+  product_id: string
+  name: string
+  quantity: number
+  unit: string
+  unit_price: number
+  estimated_cost: number
+}
+
+export type ReorderPlan = {
+  supplier_id: string
+  supplier_name: string
+  items: ReorderPlanItem[]
+  estimated_total: number
+}
+
+export type ReorderBuild = {
+  plans: ReorderPlan[]
+  /** Produits sous seuil sans fournisseur : à rattacher avant commande. */
+  withoutSupplier: LowStockAlert[]
+}
+
+function round2(value: number): number {
+  return Math.round((Number(value) || 0) * 100) / 100
+}
+
+/**
+ * Regroupe les produits sous seuil par fournisseur pour préparer un bon de
+ * commande par fournisseur. `excludeProductIds` sert à ne pas recommander un
+ * produit déjà présent dans une commande ouverte.
+ */
+export function buildReorderPlan(
+  products: StockProduct[],
+  suppliers: ReorderSupplier[],
+  options: { excludeProductIds?: Iterable<string>; multiplier?: number } = {},
+): ReorderBuild {
+  const exclude = new Set(options.excludeProductIds || [])
+  const nameById = new Map(suppliers.map(s => [s.id, s.name]))
+  const bySupplier = new Map<string, ReorderPlanItem[]>()
+  const withoutSupplier: LowStockAlert[] = []
+
+  for (const alert of buildLowStockAlerts(products)) {
+    const product = alert.product
+    if (exclude.has(product.id)) continue
+    if (alert.suggestedOrder <= 0) continue
+
+    const supplierId = product.supplier_id || ''
+    if (!supplierId) { withoutSupplier.push(alert); continue }
+
+    const unitPrice = Number(product.price_per_unit) || 0
+    const item: ReorderPlanItem = {
+      product_id: product.id,
+      name: product.name,
+      quantity: alert.suggestedOrder,
+      unit: product.unit || 'unité',
+      unit_price: unitPrice,
+      estimated_cost: round2(unitPrice * alert.suggestedOrder),
+    }
+    const list = bySupplier.get(supplierId)
+    if (list) list.push(item)
+    else bySupplier.set(supplierId, [item])
+  }
+
+  const plans: ReorderPlan[] = Array.from(bySupplier.entries())
+    .map(([supplier_id, items]) => ({
+      supplier_id,
+      supplier_name: nameById.get(supplier_id) || 'Fournisseur inconnu',
+      items,
+      estimated_total: round2(items.reduce((s, i) => s + i.estimated_cost, 0)),
+    }))
+    .sort((a, b) => b.estimated_total - a.estimated_total)
+
+  return { plans, withoutSupplier }
+}
+
+/** Produits déjà présents dans un achat brouillon ou en attente. */
+export function openPurchaseProductIds(
+  purchases: { id: string; status?: string | null }[],
+  items: { purchase_id: string; product_id?: string | null }[],
+): Set<string> {
+  const open = new Set(
+    purchases.filter(p => p.status === 'draft' || p.status === 'pending').map(p => p.id),
+  )
+  const productIds = new Set<string>()
+  for (const item of items) {
+    if (item.product_id && open.has(item.purchase_id)) productIds.add(item.product_id)
+  }
+  return productIds
 }

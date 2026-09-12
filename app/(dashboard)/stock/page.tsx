@@ -2,6 +2,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
+import ReorderButton from '@/components/stock/ReorderButton'
 import { isLotUsable, isLotReleased, QUALITY_LABELS } from '@/lib/quality/release'
 import { validateTransfer, stockByWarehouse, totalsByWarehouse, summarizeWarehouses } from '@/lib/stock/warehouses'
 
@@ -231,6 +232,7 @@ ${m.reason ? `<div style="padding:14px 18px;background:#f8f5ee;border-radius:8px
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           <button className="btn-ghost" onClick={() => { setMovType('OUT'); setMovForm({product_id:'',batch_id:'',quantity:0,reason:'',date:new Date().toISOString().split('T')[0],warehouse_id:defaultWh?.id||''}); setShowMovModal(true) }}>↓ Sortie</button>
           <Link href="/stock/inventory" className="btn-ghost" style={{ textDecoration: 'none' }}>📋 Inventaire</Link>
+          <ReorderButton />
           <Link href="/stock/recall" className="btn-ghost" style={{ textDecoration: 'none' }}>🔎 Traçabilité</Link>
           <Link href="/stock/warehouses" className="btn-ghost" style={{ textDecoration: 'none' }}>🏭 Entrepôts</Link>
           <button className="btn-ghost" disabled={warehouses.length < 2} title={warehouses.length < 2 ? 'Créez au moins 2 entrepôts (page 🏭 Entrepôts)' : 'Transférer un lot entre entrepôts'}

@@ -10,6 +10,8 @@ import {
   withRunningBalance,
 } from '@/lib/reports/ledger'
 import JournalExports from './JournalExports'
+import { buildCategoryRevenueSeries, buildMonthlyRevenueSeries, buildTopClientsSeries } from '@/lib/reports/charts'
+import { BarChart, ChartLegend, DonutChart, LineChart } from '@/components/charts/Charts'
 import { EMPLOYEE_ACTIVE_STATUSES } from '@/lib/hr/employees'
 
 export const dynamic = 'force-dynamic'
@@ -55,6 +57,7 @@ export default async function ReportsPage({
     { data: products },
     { data: batches },
     { data: movements },
+    { data: invoiceItemsData },
     { count: totalEmployees },
     { data: pendingDocs },
     { count: pendingRequests },
@@ -64,9 +67,10 @@ export default async function ReportsPage({
     supabase.from('invoices').select('id, invoice_number, status, subtotal, discount, tax_amount, total, date, client_id'),
     supabase.from('clients').select('id, name, tax_id, type'),
     supabase.from('invoice_payments').select('invoice_id, amount, payment_date, method, reference'),
-    supabase.from('products').select('id, name, quantity, threshold_alert, unit, price_per_unit'),
+    supabase.from('products').select('id, name, quantity, threshold_alert, unit, price_per_unit, category'),
     supabase.from('product_batches').select('id, product_id, batch_number, quantity, expiry_date, product:products(name)'),
     supabase.from('stock_movements').select('type, quantity, created_at').gte('created_at', startOfMonthIso),
+    supabase.from('invoice_items').select('invoice_id, product_id, quantity, subtotal'),
     supabase.from('employees').select('*', { count: 'exact', head: true }).in('status', EMPLOYEE_ACTIVE_STATUSES),
     supabase.from('documents').select('id, title, type, status, created_at').eq('status', 'pending'),
     supabase.from('document_requests').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
@@ -99,6 +103,37 @@ export default async function ReportsPage({
 
   const salesCsv = salesJournalToCsv(journal.sales)
   const receiptsCsv = receiptsJournalToCsv(journal.receipts)
+
+  // ── Graphiques (phase 3) ───────────────────────────────────────────
+  const chartInvoices = (invoicesData || []).map(inv => ({
+    id: inv.id,
+    date: inv.date,
+    status: inv.status,
+    total: Number(inv.total || 0),
+    client_id: inv.client_id,
+  }))
+  const revenueSeries = buildMonthlyRevenueSeries(chartInvoices, { months: 12 })
+  const revenuePoints = revenueSeries.map(p => ({ label: p.label, value: p.revenue }))
+  const totalRevenue12m = revenueSeries.reduce((s, p) => s + p.revenue, 0)
+
+  const categorySeries = buildCategoryRevenueSeries(
+    (invoiceItemsData || []).map(it => ({
+      invoice_id: it.invoice_id,
+      product_id: it.product_id,
+      quantity: Number(it.quantity || 0),
+      subtotal: Number(it.subtotal || 0),
+    })),
+    (products || []).map(p => ({ id: p.id, category: (p as { category?: string | null }).category })),
+    chartInvoices,
+  ).slice(0, 8)
+  const categoryPoints = categorySeries.map(c => ({ label: c.category, value: c.revenue }))
+
+  const topClients = buildTopClientsSeries(
+    chartInvoices,
+    (clientsData || []).map(c => ({ id: c.id, name: c.name })),
+    5,
+  )
+  const topClientsPoints = topClients.map(c => ({ label: c.name, value: c.revenue }))
 
   // ── Grand livre simplifié (auxiliaires clients & fournisseurs) ─────────────
   const parties = clientsData || []
@@ -280,6 +315,39 @@ export default async function ReportsPage({
             <div style={{ fontSize: '1.2rem', marginBottom: 6 }}>📬</div>
             <div className="stat-value">{pendingRequests ?? 0}</div>
             <div className="stat-label">Demandes en attente</div>
+          </div>
+        </div>
+
+        {/* Graphiques d'évolution (phase 3) */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(420px, 100%), 1fr))', gap: 24, marginBottom: 24 }}>
+          <div style={{ background: 'white', borderRadius: 12, border: '1px solid #e8e4db', padding: '16px 20px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12, marginBottom: 6, flexWrap: 'wrap' }}>
+              <h3 style={{ fontWeight: 700, color: 'var(--hub-green)', fontSize: '0.9rem', margin: 0 }}>📈 Évolution du CA — 12 mois</h3>
+              <span style={{ fontSize: '0.8rem', color: '#666' }}>Total {fcfa(totalRevenue12m)} FCFA</span>
+            </div>
+            <div style={{ fontSize: '0.72rem', color: '#999', marginBottom: 4 }}>Factures validées (validée / partielle / payée), TTC</div>
+            <LineChart points={revenuePoints} height={230} />
+          </div>
+
+          <div style={{ background: 'white', borderRadius: 12, border: '1px solid #e8e4db', padding: '16px 20px' }}>
+            <h3 style={{ fontWeight: 700, color: 'var(--hub-green)', fontSize: '0.9rem', margin: '0 0 12px' }}>🥧 CA par catégorie</h3>
+            {categoryPoints.length === 0 ? (
+              <div style={{ padding: 24, textAlign: 'center', color: '#999', fontSize: '0.85rem' }}>Aucune facture validée avec lignes produits.</div>
+            ) : (
+              <div style={{ display: 'flex', gap: 24, alignItems: 'center', flexWrap: 'wrap' }}>
+                <DonutChart points={categoryPoints} centerValue={fcfa(totalRevenue12m)} centerLabel="FCFA facturés" />
+                <ChartLegend points={categoryPoints} style={{ flex: 1, minWidth: 220 }} />
+              </div>
+            )}
+          </div>
+
+          <div style={{ background: 'white', borderRadius: 12, border: '1px solid #e8e4db', padding: '16px 20px' }}>
+            <h3 style={{ fontWeight: 700, color: 'var(--hub-green)', fontSize: '0.9rem', margin: '0 0 12px' }}>🏆 Top 5 clients (CA TTC)</h3>
+            {topClientsPoints.length === 0 ? (
+              <div style={{ padding: 24, textAlign: 'center', color: '#999', fontSize: '0.85rem' }}>Aucune facture validée.</div>
+            ) : (
+              <BarChart points={topClientsPoints} height={230} color="#d4a017" />
+            )}
           </div>
         </div>
 

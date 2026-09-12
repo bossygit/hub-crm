@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import {
   cartTotals,
@@ -292,6 +293,11 @@ export default function PortalPage() {
                 {s.icon} {s.label}
               </button>
             ))}
+            <Link href="/portal/espace"
+              style={{ padding: '12px 22px', borderRadius: 10, border: '2px solid rgba(255,255,255,0.3)', background: 'rgba(255,255,255,0.1)',
+                color: 'white', fontWeight: 700, fontSize: '0.875rem', textDecoration: 'none' }}>
+              🔐 Espace partenaire
+            </Link>
           </div>
         </div>
       </div>

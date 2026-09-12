@@ -2,6 +2,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import Link from 'next/link'
+import ReorderButton from '@/components/stock/ReorderButton'
 import {
   PAYMENT_STATUS_CONFIG,
   computePaymentStatus,
@@ -85,7 +86,10 @@ export default function PurchasesPage() {
     <div className="invoice-page invoice-page--list">
       <div className="page-header">
         <h2>🛒 Achats & réception</h2>
-        <Link href="/purchases/new" className="btn-primary" style={{ textDecoration: 'none' }}>+ Nouvelle réception</Link>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          <ReorderButton />
+          <Link href="/purchases/new" className="btn-primary" style={{ textDecoration: 'none' }}>+ Nouvelle réception</Link>
+        </div>
       </div>
 
       <div style={{ padding: '24px 32px' }}>

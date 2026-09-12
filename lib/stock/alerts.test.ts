@@ -7,6 +7,8 @@ import {
   hasRecentAlert,
   alertKey,
   stockAlertMessage,
+  buildReorderPlan,
+  openPurchaseProductIds,
   type StockProduct,
 } from './alerts.ts'
 
@@ -72,5 +74,82 @@ describe('alertKey / stockAlertMessage', () => {
     assert.match(msg, /85 kg/)
     assert.match(msg, /seuil 100/)
     assert.match(msg, /115 kg/)
+  })
+})
+
+describe('buildReorderPlan', () => {
+  const suppliers = [
+    { id: 's1', name: 'Congo Agro' },
+    { id: 's2', name: 'BZV Emballage' },
+  ]
+  const products: StockProduct[] = [
+    product({ id: 'a', name: 'Farine', quantity: 10, threshold_alert: 100, unit: 'kg', price_per_unit: 250, supplier_id: 's1' }),
+    product({ id: 'b', name: 'Sachets', quantity: 5, threshold_alert: 20, unit: 'pièce', price_per_unit: 100, supplier_id: 's2' }),
+    product({ id: 'c', name: 'Orphelin', quantity: 1, threshold_alert: 10, unit: 'kg', price_per_unit: 50, supplier_id: null }),
+    product({ id: 'd', name: 'OK', quantity: 500, threshold_alert: 10, unit: 'kg', supplier_id: 's1' }),
+  ]
+
+  it('regroupe par fournisseur et estime le coût', () => {
+    const { plans, withoutSupplier } = buildReorderPlan(products, suppliers)
+    assert.equal(plans.length, 2)
+    assert.deepEqual(withoutSupplier.map(a => a.product.id), ['c'])
+
+    const agro = plans.find(p => p.supplier_id === 's1')!
+    assert.equal(agro.supplier_name, 'Congo Agro')
+    assert.equal(agro.items.length, 1)
+    assert.equal(agro.items[0].quantity, 190) // 100*2 - 10
+    assert.equal(agro.items[0].estimated_cost, 47500)
+    assert.equal(agro.estimated_total, 47500)
+
+    const emb = plans.find(p => p.supplier_id === 's2')!
+    assert.equal(emb.items[0].quantity, 35) // 20*2 - 5
+    assert.equal(emb.estimated_total, 3500)
+  })
+
+  it('trie les commandes par montant décroissant', () => {
+    const { plans } = buildReorderPlan(products, suppliers)
+    assert.deepEqual(plans.map(p => p.supplier_id), ['s1', 's2'])
+  })
+
+  it('exclut les produits déjà en commande ouverte', () => {
+    const { plans, withoutSupplier } = buildReorderPlan(products, suppliers, { excludeProductIds: ['a', 'c'] })
+    assert.deepEqual(plans.map(p => p.supplier_id), ['s2'])
+    assert.equal(withoutSupplier.length, 0)
+  })
+
+  it('nomme les fournisseurs inconnus', () => {
+    const { plans } = buildReorderPlan(
+      [product({ id: 'x', quantity: 1, threshold_alert: 10, supplier_id: 'inconnu' })],
+      [],
+    )
+    assert.equal(plans[0].supplier_name, 'Fournisseur inconnu')
+  })
+
+  it('ignore un produit dont la quantité suggérée est nulle', () => {
+    const { plans } = buildReorderPlan(
+      [product({ id: 'z', quantity: 100, threshold_alert: 50, supplier_id: 's1' })],
+      suppliers,
+    )
+    assert.equal(plans.length, 0)
+  })
+})
+
+describe('openPurchaseProductIds', () => {
+  it('ne retient que les produits des achats brouillon / en attente', () => {
+    const purchases = [
+      { id: 'pa', status: 'draft' },
+      { id: 'pb', status: 'pending' },
+      { id: 'pc', status: 'approved' },
+      { id: 'pd', status: 'cancelled' },
+    ]
+    const items = [
+      { purchase_id: 'pa', product_id: 'x' },
+      { purchase_id: 'pb', product_id: 'y' },
+      { purchase_id: 'pc', product_id: 'z' },
+      { purchase_id: 'pd', product_id: 'w' },
+      { purchase_id: 'pa', product_id: null },
+    ]
+    const ids = openPurchaseProductIds(purchases, items)
+    assert.deepEqual(Array.from(ids).sort(), ['x', 'y'])
   })
 })

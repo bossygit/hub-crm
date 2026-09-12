@@ -10,6 +10,7 @@ import {
   type ClientPaymentInput,
   type ClientFinanceSummary,
 } from '@/lib/clients/finance'
+import { CLIENT_SEGMENTS, SEGMENT_META, type ClientSegment } from '@/lib/clients/segmentation'
 
 // Fiche partenaire enrichie (colonnes ajoutées par supabase/fix-clients-file.sql)
 type ClientRow = Client & {
@@ -21,6 +22,12 @@ type ClientRow = Client & {
   is_active?: boolean
   payment_terms?: string | null
   credit_limit?: number | null
+  // Segmentation (phase 3)
+  segment?: string | null
+  segment_score?: number | null
+  orders_count?: number | null
+  lifetime_value?: number | null
+  last_order_at?: string | null
 }
 
 type InvoiceRow = { id: string; client_id: string | null; status: string; total: number; date: string }
@@ -87,6 +94,8 @@ export default function ClientsPage() {
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<string>('all')
   const [activeFilter, setActiveFilter] = useState<'all' | 'actif' | 'inactif'>('all')
+  const [segmentFilter, setSegmentFilter] = useState<'all' | ClientSegment>('all')
+  const [segmenting, setSegmenting] = useState(false)
   const [showModal, setShowModal] = useState(false)
   const [editing, setEditing] = useState<ClientRow | null>(null)
   const [form, setForm] = useState<FormState>(emptyForm)
@@ -138,9 +147,30 @@ export default function ClientsPage() {
       const isActive = c.is_active !== false
       const matchActive = activeFilter === 'all' ||
         (activeFilter === 'actif' ? isActive : !isActive)
-      return matchSearch && matchType && matchActive
+      const matchSegment = segmentFilter === 'all' || c.segment === segmentFilter
+      return matchSearch && matchType && matchActive && matchSegment
     })
-  }, [clients, search, filter, activeFilter])
+  }, [clients, search, filter, activeFilter, segmentFilter])
+
+  // Recalcule la segmentation RFM de tous les clients (phase 3).
+  async function runSegmentation() {
+    setSegmenting(true)
+    try {
+      const result = await fetch('/api/clients/segment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      }).then(r => r.json())
+
+      if (!result?.ok) throw new Error(result?.error || 'Recalcul impossible.')
+      toast(result.failed ? 'warning' : 'success', `${result.updated} client(s) segmenté(s)${result.failed ? `, ${result.failed} échec(s)` : ''}.`)
+      load()
+    } catch (e) {
+      toast('error', e instanceof Error ? e.message : 'Erreur inattendue.')
+    } finally {
+      setSegmenting(false)
+    }
+  }
 
   function openNew() {
     setEditing(null)
@@ -264,7 +294,13 @@ export default function ClientsPage() {
     <div>
       <div className="page-header">
         <h2>👥 Clients & Partenaires</h2>
-        <button className="btn-primary" onClick={openNew}>+ Nouveau contact</button>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          <button className="btn-ghost" disabled={segmenting} onClick={runSegmentation}
+            title="Recalcule le segment (VIP, fidèle, actif, inactif, prospect) et le score de chaque client">
+            {segmenting ? '⏳…' : '🏷 Recalculer les segments'}
+          </button>
+          <button className="btn-primary" onClick={openNew}>+ Nouveau contact</button>
+        </div>
       </div>
 
       <div style={{ padding: '24px 32px' }}>
@@ -291,6 +327,18 @@ export default function ClientsPage() {
                   background: activeFilter === f.key ? 'white' : 'transparent',
                   color: activeFilter === f.key ? 'var(--hub-green)' : '#666',
                   boxShadow: activeFilter === f.key ? '0 1px 4px rgba(0,0,0,0.1)' : 'none' }}>
+                {f.label}
+              </button>
+            ))}
+          </div>
+          {/* Filtre segmentation (phase 3) */}
+          <div style={{ display: 'flex', gap: 0, background: '#f0ece4', borderRadius: 8, padding: 3, flexWrap: 'wrap' }}>
+            {[{ key: 'all' as const, label: 'Tous segments' }, ...CLIENT_SEGMENTS.map(s => ({ key: s, label: `${SEGMENT_META[s].icon} ${SEGMENT_META[s].label}` }))].map(f => (
+              <button key={f.key} onClick={() => setSegmentFilter(f.key as 'all' | ClientSegment)}
+                style={{ padding: '7px 14px', borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: '0.8rem', whiteSpace: 'nowrap',
+                  background: segmentFilter === f.key ? 'white' : 'transparent',
+                  color: segmentFilter === f.key ? 'var(--hub-green)' : '#666',
+                  boxShadow: segmentFilter === f.key ? '0 1px 4px rgba(0,0,0,0.1)' : 'none' }}>
                 {f.label}
               </button>
             ))}
@@ -323,6 +371,7 @@ export default function ClientsPage() {
                   <th>Contact</th>
                   <th>NIF</th>
                   <th>Solde client</th>
+                  <th>Segment</th>
                   <th>Statut</th>
                   <th>Actions</th>
                 </tr>
@@ -332,6 +381,7 @@ export default function ClientsPage() {
                   const isActive = c.is_active !== false
                   const fin = c.type === 'client' ? balances.get(c.id) : undefined
                   const due = (fin?.balanceDue || 0) > 0
+                  const segMeta = c.segment ? SEGMENT_META[c.segment as ClientSegment] : null
                   return (
                     <tr key={c.id} style={{ opacity: isActive ? 1 : 0.55 }}>
                       <td>
@@ -368,6 +418,18 @@ export default function ClientsPage() {
                           )
                         ) : (
                           <span style={{ color: '#bbb' }}>—</span>
+                        )}
+                      </td>
+                      <td>
+                        {segMeta ? (
+                          <>
+                            <span className={`badge ${segMeta.badge}`}>{segMeta.icon} {segMeta.label}</span>
+                            {typeof c.segment_score === 'number' && (
+                              <div style={{ fontSize: '0.68rem', color: '#999', marginTop: 2 }}>score {c.segment_score}/100</div>
+                            )}
+                          </>
+                        ) : (
+                          <span style={{ color: '#bbb', fontSize: '0.75rem' }} title="Lancez « Recalculer les segments »">—</span>
                         )}
                       </td>
                       <td>

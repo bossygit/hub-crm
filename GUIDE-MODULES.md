@@ -384,6 +384,10 @@ Patches audit phase 1 & 2 (apres 28) :
 29. `20260911150000_phase1_stabilisation_demo_data.sql` — **Stabilisation** : fournisseurs/produits/employes de demonstration, regularisation des factures en attente, reconciliation du schema RH divergent (`employees.start_date`, CHECK `status` elargi **sans reecrire** les lignes, trigger `sync_employee_dates`)
 30. `20260911160000_phase2_activation.sql` — **Activation** : elargissement du CHECK `notifications.type` (`stock_low`, `invoice_overdue`, `reminder_sent`, `inventory_planned`), table `invoice_reminders` (+ RLS), planification d'inventaire (`inventory_sessions.scheduled_date` / `assigned_to` / `schedule_notes` + statut `planned`), index de scan des factures ouvertes
 
+Patches audit phase 3 (apres 30) :
+
+31. `20260911170000_phase3_optimisation.sql` — **Optimisation** : colonnes de segmentation clients (`segment`, `segment_score`, `orders_count`, `lifetime_value`, `last_order_at`), rattachement portail (`clients.user_id`, `portal_enabled`), policies self partenaires (fiche, factures, lignes, paiements, documents) et **durcissement des policies `portal_orders`** (un partenaire ne voit que ses commandes, direction = acces complet)
+
 ---
 
 ## Roles et permissions
@@ -454,6 +458,21 @@ Phase 2 de l'audit, **hors connexion au site e-commerce** (exclue volontairement
 **Automatisation** : les deux routes acceptent soit une session manager (ceo/manager/admin), soit `Authorization: Bearer $CRON_SECRET` pour les tâches planifiées. Définir `CRON_SECRET` dans les variables d'environnement Vercel pour activer les crons ; sinon utiliser les boutons manuels. Les relances email nécessitent `RESEND_API_KEY`.
 
 **Logique testée** : `lib/clients/reminders.ts` (soldes, retard, niveaux, carence, emails), `lib/stock/alerts.ts` (seuils, réappro conseillé, anti-doublon), `lib/stock/inventorySchedule.ts` (planification) — 28 tests unitaires.
+
+---
+
+## Évolutions septembre 2026 — Phase 3 « Optimisation »
+
+Phase 3 de l'audit, **sans l'assistant IA** (exclu volontairement). Quatre chantiers livrés :
+
+| Chantier | Livraison |
+|----------|-----------|
+| **Graphiques d'évolution** | Composants SVG maison (aucune dépendance ajoutée) : `components/charts/Charts.tsx` (`LineChart`, `BarChart`, `DonutChart`, `ChartLegend`). Page **Rapports** : courbe du CA TTC sur 12 mois, anneau « CA par catégorie », barres « Top 5 clients ». Helpers purs dans `lib/reports/charts.ts` (séries mensuelles, catégories, top clients, échelles, géométrie SVG) |
+| **Réapprovisionnement automatisé** | `POST /api/purchases/reorder` : regroupe les produits sous seuil **par fournisseur** et crée un **bon de commande brouillon** par fournisseur (quantités conseillées, total estimé). Les produits déjà en commande ouverte sont exclus ; ceux sans fournisseur sont signalés. Bouton « 🛒 Réapprovisionner » sur `/stock` et `/purchases` (aperçu + confirmation) |
+| **Segmentation clients** | Colonnes `clients.segment/segment_score/orders_count/lifetime_value/last_order_at` + `POST /api/clients/segment` (scoring **RFM** récence/fréquence/montant). Segments : VIP, Fidèle, Actif, Inactif, Prospect. Page **Clients** : colonne segment + score, filtre par segment, bouton « 🏷 Recalculer les segments ». Logique pure dans `lib/clients/segmentation.ts` |
+| **Portail partenaires** | Espace authentifié **`/portal/espace`** : le partenaire (compte relié à `clients.user_id`) consulte sa fiche, ses factures + solde dû, ses livraisons/documents et ses commandes portail. Accès depuis le portail public (« 🔐 Espace partenaire »). **Sécurité** : policies self strictes, et les policies `portal_orders` ont été durcies (l'ancienne laissait tout compte authentifié lire/modifier toutes les commandes) |
+
+**Logique testée** : `lib/reports/charts.ts` (16 tests), `lib/clients/segmentation.ts` (12 tests), plus les helpers de réappro (`buildReorderPlan`, `openPurchaseProductIds`) — **281 tests** au total.
 
 
 ---
