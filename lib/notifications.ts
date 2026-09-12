@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
-import { resend } from '@/lib/resend'
+import { resend, RESEND_FROM, isResendConfigured } from '@/lib/resend'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
 type NotificationType =
@@ -80,9 +80,8 @@ export async function createNotification(params: {
   await supabase.from('notifications').insert(notifications)
 
   let emailed = 0
-  const resendKey = process.env.RESEND_API_KEY
   const emailEnabled = params.sendEmail !== false
-  if (emailEnabled && resendKey && resendKey !== 're_your-resend-api-key-here') {
+  if (emailEnabled && isResendConfigured()) {
     const appBase =
       (process.env.NEXT_PUBLIC_APP_URL || '').replace(/\/$/, '') ||
       (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')
@@ -98,8 +97,8 @@ export async function createNotification(params: {
       const email = emailMap.get(r.id)
       if (!email) continue
       try {
-        await resend.emails.send({
-          from: 'HUB-Distribution <contact@hub-distribution.com>',
+        const result = await resend.emails.send({
+          from: RESEND_FROM,
           to: email,
           subject: `${typeIcons[params.type]} ${params.title}`,
           html: `
@@ -120,9 +119,13 @@ export async function createNotification(params: {
             </div>
           `,
         })
+        if (result?.error) {
+          console.warn('[notifications] e-mail refusé par Resend :', result.error.message)
+          continue
+        }
         emailed++
-      } catch {
-        // Silently fail for individual email errors
+      } catch (e) {
+        console.warn('[notifications] échec e-mail :', e instanceof Error ? e.message : e)
       }
     }
   }

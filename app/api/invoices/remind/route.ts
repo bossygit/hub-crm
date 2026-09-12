@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { authorizeManager } from '@/lib/auth/serverGuard'
 import { createNotification } from '@/lib/notifications'
-import { resend } from '@/lib/resend'
+import { resend, RESEND_FROM, isResendConfigured, resendFromDomain } from '@/lib/resend'
 import {
   buildReminderEmail,
   planReminders,
@@ -22,13 +22,7 @@ import {
 // invoice_reminders et notifie l'équipe in-app. Appelable par un manager
 // connecté ou par une tâche planifiée (`Authorization: Bearer $CRON_SECRET`).
 
-const FROM = 'HUB-Distribution <contact@hub-distribution.com>'
 const REMINDABLE_STATUSES = ['approved', 'partial']
-
-function resendConfigured(): boolean {
-  const key = process.env.RESEND_API_KEY
-  return !!key && key !== 're_your-resend-api-key-here'
-}
 
 export async function POST(req: NextRequest) {
   try {
@@ -53,7 +47,7 @@ export async function POST(req: NextRequest) {
     const { data: invoices, error: invError } = await query
     if (invError) return NextResponse.json({ error: invError.message }, { status: 500 })
     if (!invoices || invoices.length === 0) {
-      return NextResponse.json({ ok: true, ready: 0, sent: 0, failed: 0, onCooldown: 0, withoutEmail: 0, emailConfigured: resendConfigured() })
+      return NextResponse.json({ ok: true, ready: 0, sent: 0, failed: 0, onCooldown: 0, withoutEmail: 0, emailConfigured: isResendConfigured() })
     }
 
     const ids = invoices.map(i => i.id)
@@ -82,7 +76,7 @@ export async function POST(req: NextRequest) {
       return !!c?.email
     })
     const withoutEmail = plan.ready.length - withEmail.length
-    const emailConfigured = resendConfigured()
+    const emailConfigured = isResendConfigured()
 
     if (dryRun) {
       return NextResponse.json({
@@ -107,7 +101,7 @@ export async function POST(req: NextRequest) {
     if (!emailConfigured) {
       return NextResponse.json({
         ok: false,
-        error: 'RESEND_API_KEY non configurée — les relances email sont indisponibles.',
+        error: `RESEND_API_KEY non configurée — les relances email sont indisponibles.`,
         ready: withEmail.length,
         emailConfigured: false,
       }, { status: 503 })
@@ -133,7 +127,7 @@ export async function POST(req: NextRequest) {
       let errorMessage: string | null = null
       try {
         const result = await resend.emails.send({
-          from: FROM,
+          from: RESEND_FROM,
           to: recipient.email,
           subject: mail.subject,
           html: mail.html,
@@ -141,7 +135,10 @@ export async function POST(req: NextRequest) {
         })
         if (result?.error) {
           status = 'failed'
-          errorMessage = String((result.error as { message?: string }).message || 'envoi refusé')
+          const detail = String((result.error as { message?: string }).message || 'envoi refusé')
+          errorMessage = /domain|verified|verify/i.test(detail)
+            ? `${detail} — vérifiez que le domaine ${resendFromDomain()} est validé dans Resend, ou définissez RESEND_FROM.`
+            : detail
         }
       } catch (e) {
         status = 'failed'
